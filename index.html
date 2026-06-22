@@ -1,0 +1,2000 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sales Intelligence Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0f14;--surface:#161a23;--surface2:#1e2330;--border:#2a3047;
+  --accent:#4f7cff;--green:#00e5a0;--warn:#ff6b35;--danger:#ff3b5c;--purple:#a855f7;--gold:#fbbf24;--cyan:#06b6d4;
+  --text:#e8eaf2;--muted:#7a82a0;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-weight:300;line-height:1.5;min-height:100vh}
+
+/* ── UPLOAD SCREEN ── */
+#uploadScreen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:20px;overflow-y:auto}
+.up-hero{text-align:center;margin-bottom:4px}
+.up-logo{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.1em;margin-bottom:8px}
+.up-title{font-size:24px;font-weight:700;margin-bottom:4px}
+.up-sub{font-size:13px;color:var(--muted)}
+.slots-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;width:100%;max-width:900px}
+.slot{border:2px dashed var(--border);border-radius:12px;padding:16px 12px;text-align:center;cursor:pointer;transition:.2s;position:relative;min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+.slot:hover,.slot.drag{border-color:var(--accent);background:#4f7cff0a}
+.slot.loaded{border-color:var(--green);border-style:solid;background:#00e5a008}
+.slot-day{font-family:var(--mono);font-size:10px;color:var(--accent);font-weight:600;text-transform:uppercase;letter-spacing:.08em}
+.slot-icon{font-size:22px}
+.slot-label{font-size:11px;color:var(--muted);line-height:1.4}
+.slot.loaded .slot-label{color:var(--green);font-size:10px}
+.slot-remove{position:absolute;top:6px;right:8px;font-size:14px;color:var(--muted);cursor:pointer;line-height:1}
+.slot-remove:hover{color:var(--danger)}
+input[type=file]{display:none}
+.up-actions{display:flex;gap:12px;align-items:center}
+.up-btn{background:var(--accent);border:none;color:#fff;font-family:var(--mono);font-size:12px;font-weight:600;padding:10px 28px;border-radius:8px;cursor:pointer;letter-spacing:.05em;text-transform:uppercase;transition:.15s}
+.up-btn:hover{opacity:.85}
+.up-btn:disabled{opacity:.4;cursor:not-allowed}
+.up-hint{font-size:11px;color:var(--muted);font-family:var(--mono);max-width:760px;text-align:center;line-height:1.7}
+.up-hint b{color:var(--text)}
+
+/* ── HEADER ── */
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 28px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;flex-wrap:wrap}
+.logo{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--accent);letter-spacing:.08em;margin-right:auto}
+.day-badge{font-family:var(--mono);font-size:10px;padding:3px 10px;border-radius:20px;border:1px solid;cursor:pointer;transition:.15s;white-space:nowrap}
+.day-badge.active-day{background:var(--green);border-color:var(--green);color:#000;font-weight:600}
+.day-badge.inactive-day{border-color:var(--border);color:var(--muted)}
+.day-badge.inactive-day:hover{border-color:var(--accent);color:var(--accent)}
+.reload-btn{font-size:11px;font-family:var(--mono);background:transparent;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:6px;cursor:pointer}
+.reload-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ── TABS ── */
+.view-tabs{display:flex;gap:0;background:var(--surface2);border-bottom:1px solid var(--border);padding:0 28px;overflow-x:auto}
+.vtab{font-family:var(--mono);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding:10px 16px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:.15s;white-space:nowrap}
+.vtab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.vtab:hover:not(.active){color:var(--text)}
+
+/* ── FILTERS ── */
+.filters{display:flex;gap:12px;padding:10px 28px;background:var(--surface2);border-bottom:1px solid var(--border);flex-wrap:wrap;align-items:center}
+.filter-label{font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.pills{display:flex;gap:6px;flex-wrap:wrap}
+.pill{font-family:var(--mono);font-size:10px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:.15s;text-transform:uppercase;letter-spacing:.05em}
+.pill.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.pill:hover:not(.active){border-color:var(--accent);color:var(--accent)}
+
+/* ── MAIN ── */
+.main{padding:20px 28px}
+
+/* ── KPI STRIP ── */
+.kpi-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px;margin-bottom:20px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--accent)}
+.kpi.g::before{background:var(--green)}.kpi.r::before{background:var(--danger)}.kpi.w::before{background:var(--warn)}.kpi.p::before{background:var(--purple)}
+.kpi-lbl{font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.kpi-val{font-size:22px;font-weight:700;font-family:var(--mono)}
+.kpi-sub{font-size:10px;color:var(--muted);margin-top:3px}
+.kpi-chg{font-size:11px;font-family:var(--mono);margin-top:5px}
+.up{color:var(--green)}.dn{color:var(--danger)}.neu{color:var(--muted)}
+
+/* ── CHARTS ── */
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px;margin-bottom:20px}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px}
+.chart-card.wide{grid-column:1/-1}
+.ct{font-size:11px;font-weight:600;color:var(--text);font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+.cs{font-size:11px;color:var(--muted);margin-bottom:14px}
+.cw{position:relative;height:230px}
+.cw.tall{height:300px}
+
+/* ── TABLES ── */
+.tbl-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;overflow-x:auto;margin-bottom:16px}
+.dtable{width:100%;border-collapse:collapse;font-size:11px}
+.dtable thead th{background:var(--surface2);padding:9px 12px;text-align:left;font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);white-space:nowrap;border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
+.dtable thead th:hover{color:var(--text)}
+.dtable thead th.num{text-align:right}
+.dtable tbody tr{border-bottom:1px solid var(--border);transition:.1s}
+.dtable tbody tr:hover{background:var(--surface2)}
+.dtable tbody tr:last-child{border-bottom:none}
+.dtable tbody tr.total-row{background:var(--surface2);font-weight:600;border-top:2px solid var(--border)}
+.dtable td{padding:8px 12px;white-space:nowrap}
+.dtable td.num{text-align:right;font-family:var(--mono)}
+.dtable td.lbl{font-family:var(--mono);font-weight:600;font-size:10px}
+.bar-inline{display:inline-block;height:5px;border-radius:3px;vertical-align:middle;margin-left:5px}
+
+/* ── INSIGHT CARDS ── */
+.ins-hdr{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.ins-badge{background:linear-gradient(135deg,#4f7cff,#00e5a0);padding:3px 10px;border-radius:20px;font-size:10px;font-family:var(--mono);font-weight:600;color:#fff;text-transform:uppercase;letter-spacing:.08em}
+.ins-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;margin-bottom:24px}
+.ins-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;border-left:3px solid var(--accent)}
+.ins-card.pos{border-left-color:var(--green)}.ins-card.warn{border-left-color:var(--warn)}.ins-card.dng{border-left-color:var(--danger)}.ins-card.info{border-left-color:var(--accent)}
+.ins-num{font-family:var(--mono);font-size:10px;color:var(--accent);font-weight:700;margin-right:6px}
+.ins-tag{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:5px;display:flex;align-items:center}
+.ins-txt{font-size:12px;line-height:1.65}
+.ins-txt b{color:var(--text);font-weight:600}
+.ins-act{margin-top:8px;font-size:11px;color:var(--green);font-style:italic}
+.impact-dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-left:auto}
+.imp-hi{background:var(--danger)}.imp-md{background:var(--warn)}.imp-lo{background:var(--muted)}
+
+/* ── NARRATIVE ── */
+.narrative{background:linear-gradient(135deg,#161a23,#1a1f2e);border:1px solid var(--border);border-radius:12px;padding:22px 26px;margin-bottom:24px;border-left:4px solid var(--accent)}
+.narrative h3{font-size:13px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:12px}
+.narrative p{font-size:13px;line-height:1.8;margin-bottom:10px;color:var(--text)}
+.narrative p:last-child{margin-bottom:0}
+.narrative b{color:var(--green);font-weight:600}
+.narrative .neg{color:var(--danger)}
+
+/* ── STATUS BADGES ── */
+.status-p{color:var(--green)}.status-wfh{color:var(--cyan)}.status-l{color:var(--danger)}.status-hl{color:var(--warn)}.status-co{color:var(--purple)}.status-h{color:var(--gold)}
+
+/* ── SECTION ── */
+.section-title{font-size:15px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:10px}
+.section-sub{font-size:11px;color:var(--muted);margin-bottom:14px}
+.mom-section{margin-bottom:28px}
+
+/* ── TREND COMPARE ── */
+.trend-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:20px}
+.trend-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px}
+.trend-metric{font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.trend-vals{display:flex;align-items:flex-end;gap:3px;height:40px}
+.trend-bar-wrap{display:flex;flex-direction:column;align-items:center;gap:2px;flex:1}
+.trend-b{width:100%;border-radius:3px 3px 0 0;background:var(--accent);transition:.3s;min-height:2px}
+.trend-day-lbl{font-family:var(--mono);font-size:8px;color:var(--muted)}
+
+/* ── HEAT CELL ── */
+.heat{padding:2px 6px;border-radius:4px;font-family:var(--mono);font-size:10px}
+.heat-hi{background:#00e5a022;color:var(--green)}.heat-md{background:#ff6b3522;color:var(--warn)}.heat-lo{background:#ff3b5c22;color:var(--danger)}
+
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+@media(max-width:700px){
+  .main,.header,.filters,.view-tabs{padding-left:14px;padding-right:14px}
+  .charts{grid-template-columns:1fr}
+  .kpi-strip{grid-template-columns:repeat(2,1fr)}
+  .slots-grid{grid-template-columns:repeat(2,1fr)}
+  .slot:nth-child(5){grid-column:1/-1}
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ UPLOAD SCREEN ══════════════ -->
+<div id="uploadScreen">
+  <div class="up-hero">
+    <div class="up-logo">◈ SALESPULSE · INTELLIGENCE EDITION</div>
+    <div class="up-title">Sales Activity Dashboard</div>
+    <div class="up-sub">Daily call-time analysis · team vs rep · multi-day trend comparison</div>
+  </div>
+
+  <div class="slots-grid">
+    <div class="slot" id="slot0" onclick="triggerSlot(0)" ondragover="dragOver(event,0)" ondragleave="dragLeave(0)" ondrop="dropSlot(event,0)">
+      <div class="slot-day">Day 1</div>
+      <div class="slot-icon">📋</div>
+      <div class="slot-label">Drop or click<br>to upload</div>
+      <input type="file" id="fi0" accept=".xlsx,.xls,.csv" onchange="handleSlotFile(0,this.files[0])">
+    </div>
+    <div class="slot" id="slot1" onclick="triggerSlot(1)" ondragover="dragOver(event,1)" ondragleave="dragLeave(1)" ondrop="dropSlot(event,1)">
+      <div class="slot-day">Day 2</div>
+      <div class="slot-icon">📋</div>
+      <div class="slot-label">Drop or click<br>to upload</div>
+      <input type="file" id="fi1" accept=".xlsx,.xls,.csv" onchange="handleSlotFile(1,this.files[0])">
+    </div>
+    <div class="slot" id="slot2" onclick="triggerSlot(2)" ondragover="dragOver(event,2)" ondragleave="dragLeave(2)" ondrop="dropSlot(event,2)">
+      <div class="slot-day">Day 3</div>
+      <div class="slot-icon">📋</div>
+      <div class="slot-label">Drop or click<br>to upload</div>
+      <input type="file" id="fi2" accept=".xlsx,.xls,.csv" onchange="handleSlotFile(2,this.files[0])">
+    </div>
+    <div class="slot" id="slot3" onclick="triggerSlot(3)" ondragover="dragOver(event,3)" ondragleave="dragLeave(3)" ondrop="dropSlot(event,3)">
+      <div class="slot-day">Day 4</div>
+      <div class="slot-icon">📋</div>
+      <div class="slot-label">Drop or click<br>to upload</div>
+      <input type="file" id="fi3" accept=".xlsx,.xls,.csv" onchange="handleSlotFile(3,this.files[0])">
+    </div>
+    <div class="slot" id="slot4" onclick="triggerSlot(4)" ondragover="dragOver(event,4)" ondragleave="dragLeave(4)" ondrop="dropSlot(event,4)">
+      <div class="slot-day">Day 5</div>
+      <div class="slot-icon">📋</div>
+      <div class="slot-label">Drop or click<br>to upload</div>
+      <input type="file" id="fi4" accept=".xlsx,.xls,.csv" onchange="handleSlotFile(4,this.files[0])">
+    </div>
+  </div>
+
+  <div class="up-actions">
+    <button class="up-btn" id="goBtn" onclick="launchDash()" disabled>▶ Launch Dashboard</button>
+  </div>
+  <div class="up-hint">
+    Upload <b>1–5 daily Excel/CSV files</b> (Mon→Fri). Each file should contain a <b>Team summary block</b> (with Team, CC Count, Total Dials, Connected Calls, Call Time, Appointments, Appo Target) and optionally a <b>Rep detail block</b> (with Name, Team, Total Dials, etc.). The dashboard auto-detects both blocks and enables multi-day trend comparison when multiple files are loaded.
+  </div>
+</div>
+
+<!-- ══════════════ DASHBOARD ══════════════ -->
+<div id="dashWrap" style="display:none">
+
+<header class="header">
+  <span class="logo">◈ SALESPULSE</span>
+  <div id="dayBadges" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+  <button class="reload-btn" onclick="resetDash()">↑ Load New Files</button>
+</header>
+
+<div class="view-tabs">
+  <button class="vtab active" onclick="switchView('team')" id="tab-team">🏆 Team Summary</button>
+  <button class="vtab" onclick="switchView('reps')" id="tab-reps">👤 Rep Leaderboard</button>
+  <button class="vtab" onclick="switchView('insights')" id="tab-insights">💡 Auto Insights</button>
+  <button class="vtab" onclick="switchView('attendance')" id="tab-attendance">📋 Attendance</button>
+  <button class="vtab" onclick="switchView('trend')" id="tab-trend">📈 Multi-Day Trend</button>
+</div>
+
+<div class="filters" id="teamFilterRow">
+  <span class="filter-label">Team</span>
+  <div class="pills" id="teamPills"></div>
+</div>
+
+<div class="main">
+
+  <!-- TEAM SUMMARY -->
+  <div id="view-team">
+    <div class="kpi-strip" id="teamKpiStrip"></div>
+    <div class="mom-section">
+      <div class="section-title">📊 Team Performance Table</div>
+      <div class="section-sub">All teams for selected day · click column headers to sort</div>
+      <div class="tbl-wrap"><table class="dtable" id="teamTable"></table></div>
+    </div>
+    <div class="charts" id="teamChartsGrid"></div>
+  </div>
+
+  <!-- REP LEADERBOARD -->
+  <div id="view-reps" style="display:none">
+    <div class="kpi-strip" id="repKpiStrip"></div>
+    <div class="mom-section">
+      <div class="section-title">👤 Rep Detail Table</div>
+      <div class="section-sub">All reps for selected day & team filter · click headers to sort</div>
+      <div class="tbl-wrap"><table class="dtable" id="repTable"></table></div>
+    </div>
+    <div class="charts" id="repChartsGrid"></div>
+  </div>
+
+  <!-- AUTO INSIGHTS -->
+  <div id="view-insights" style="display:none">
+    <div class="narrative" id="narrativeBox"></div>
+    <div class="ins-hdr"><span class="ins-badge">Auto Analysis</span><span style="font-size:14px;font-weight:600">Ranked Findings — sorted by business impact</span></div>
+    <div class="ins-grid" id="insightGrid"></div>
+  </div>
+
+  <!-- ATTENDANCE -->
+  <div id="view-attendance" style="display:none">
+    <div class="kpi-strip" id="attKpiStrip"></div>
+    <div class="mom-section">
+      <div class="section-title">📋 Attendance Breakdown by Team</div>
+      <div class="section-sub">P = Present · WFH = Work From Home · L = Leave · HL = Half Leave · CO = Comp Off</div>
+      <div class="tbl-wrap"><table class="dtable" id="attTable"></table></div>
+    </div>
+    <div class="charts" id="attChartsGrid"></div>
+  </div>
+
+  <!-- MULTI-DAY TREND -->
+  <div id="view-trend" style="display:none">
+    <div id="trendNoData" style="display:none;color:var(--muted);font-size:13px;padding:20px 0">Upload at least 2 daily files to see trends.</div>
+    <div id="trendContent">
+      <div class="kpi-strip" id="trendKpiStrip"></div>
+      <div class="charts" id="trendChartsGrid"></div>
+      <div class="mom-section">
+        <div class="section-title">📅 Day-on-Day Comparison Table</div>
+        <div class="section-sub">Grand total metrics across all uploaded days</div>
+        <div class="tbl-wrap"><table class="dtable" id="trendTable"></table></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════
+const MAX_SLOTS = 5;
+const COLORS = ['#4f7cff','#00e5a0','#ff6b35','#a855f7','#ff3b5c','#fbbf24','#06b6d4','#84cc16'];
+const BASE_SCALE = {x:{ticks:{color:'#7a82a0',font:{size:9,family:'IBM Plex Mono'}},grid:{color:'#1e2330'}},y:{ticks:{color:'#7a82a0',font:{size:9,family:'IBM Plex Mono'}},grid:{color:'#1e2330'}}};
+const TOOLTIP = {backgroundColor:'#1e2330',borderColor:'#2a3047',borderWidth:1,titleColor:'#e8eaf2',bodyColor:'#7a82a0',padding:8};
+const LEGEND = {labels:{color:'#7a82a0',font:{family:'IBM Plex Mono',size:9},boxWidth:10}};
+
+// slots[i] = { name, date, teams:[], reps:[] } or null
+let slots = [null,null,null,null,null];
+let activeDay = 0; // index into slots[] (only loaded ones)
+let currentView = 'team';
+let selectedTeams = new Set(['All']);
+let charts = {};
+let sortCol = null, sortAsc = true;
+
+// ═══════════════════════════════════════════════════════
+//  UPLOAD / PARSE
+// ═══════════════════════════════════════════════════════
+function triggerSlot(i){ document.getElementById('fi'+i).click(); }
+function dragOver(e,i){ e.preventDefault(); document.getElementById('slot'+i).classList.add('drag'); }
+function dragLeave(i){ document.getElementById('slot'+i).classList.remove('drag'); }
+function dropSlot(e,i){ e.preventDefault(); dragLeave(i); const f=e.dataTransfer.files[0]; if(f) handleSlotFile(i,f); }
+
+function handleSlotFile(i, file){
+  if(!file) return;
+  const r = new FileReader();
+  r.onload = e => {
+    try{
+      const data = parseFile(e.target.result, file.name);
+      if(!data){ alert('Could not parse file — check column headers.'); return; }
+      slots[i] = data;
+      markSlotLoaded(i, file.name);
+      document.getElementById('goBtn').disabled = false;
+    }catch(err){ alert('Error: '+err.message); }
+  };
+  if(file.name.endsWith('.csv')){ r.readAsText(file); }
+  else { r.readAsArrayBuffer(file); }
+}
+
+function markSlotLoaded(i, name){
+  const slot = document.getElementById('slot'+i);
+  slot.classList.add('loaded');
+  slot.querySelector('.slot-icon').textContent = '✅';
+  slot.querySelector('.slot-label').textContent = name.length>20 ? name.slice(0,18)+'…' : name;
+  // add remove button if not present
+  if(!slot.querySelector('.slot-remove')){
+    const x = document.createElement('span');
+    x.className='slot-remove'; x.textContent='×';
+    x.onclick = e => { e.stopPropagation(); clearSlot(i); };
+    slot.appendChild(x);
+  }
+}
+
+function clearSlot(i){
+  slots[i]=null;
+  const slot=document.getElementById('slot'+i);
+  slot.classList.remove('loaded','drag');
+  slot.querySelector('.slot-icon').textContent='📋';
+  slot.querySelector('.slot-label').innerHTML='Drop or click<br>to upload';
+  const rem=slot.querySelector('.slot-remove'); if(rem) rem.remove();
+  document.getElementById('fi'+i).value='';
+  if(slots.every(s=>s===null)) document.getElementById('goBtn').disabled=true;
+}
+
+function excelDateToStr(v){
+  if(typeof v==='number'){ const d=new Date(Math.round((v-25569)*86400*1000)); return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}); }
+  if(typeof v==='string') return v.trim();
+  if(v instanceof Date) return v.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
+  return '?';
+}
+
+// Normalize whitespace: collapses NBSP (\xa0), tabs, and repeated spaces to a single
+// regular space. Some daily exports use NBSP inside header text (e.g. "Call\xa0Time\xa0%")
+// while others use plain spaces — without this normalization, column-name matching
+// silently fails on the NBSP files and those metrics default to 0.
+function normWS(s){ return String(s||'').replace(/[\s\u00a0]+/g,' ').trim(); }
+
+function parseFile(buffer, fileName){
+  let rows;
+  if(typeof buffer === 'string'){
+    // CSV
+    rows = buffer.split('\n').map(l=>l.split(',').map(c=>c.trim().replace(/^"|"$/g,'')));
+  } else {
+    const wb = XLSX.read(buffer,{type:'array'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    rows = XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+  }
+
+  // Find header rows
+  const teamHeaderIdx = rows.findIndex(r => r && r.some(c=>normWS(c).toLowerCase().includes('total dials')) && r.some(c=>normWS(c).toLowerCase().includes('team')));
+  if(teamHeaderIdx<0) throw new Error('Cannot find Team summary header row (needs "Team" and "Total Dials" columns).');
+
+  const teamHdr = rows[teamHeaderIdx].map(h=>normWS(h));
+  const tIdx = h => teamHdr.findIndex(x=>x.toLowerCase().includes(h.toLowerCase()));
+
+  const tTeam=tIdx('Team'), tCC=tIdx('CC'), tDials=tIdx('Total Dial'), tAvgDial=tIdx('Avg Dial'),
+        tConn=tIdx('Connected Call'), tAvgConn=tIdx('Avg Con'), tCallMin=tIdx('Call Time ( In Min'),
+        tCallPct=tIdx('Call Time %'), tTarget=tIdx('Appo Target'), tAppo=tIdx('Appointment'),
+        tRunrate=tIdx('Ach Run'), tAvgAppo=tIdx('Average Appo'), tHV=tIdx('Home Visit'), tDate=tIdx('Date');
+
+  let date = 'Unknown';
+  const teamRows = [];
+  for(let r=teamHeaderIdx+1; r<rows.length; r++){
+    const row = rows[r];
+    if(!row || row.every(v=>v===null||v===''||v===undefined)) break;
+    const teamVal = normWS(row[tTeam]);
+    if(!teamVal || teamVal.toLowerCase().includes('grand total')){ continue; }
+    // stop if we hit a second header block (Name col)
+    if(teamVal.toLowerCase()==='name') break;
+    if(tDate>=0 && row[tDate]) date = excelDateToStr(row[tDate]);
+    teamRows.push({
+      team:teamVal,
+      cc:+row[tCC]||0, dials:+row[tDials]||0, avgDial:+row[tAvgDial]||0,
+      connected:+row[tConn]||0, avgConn:+row[tAvgConn]||0,
+      callMin:+row[tCallMin]||0, callPct:+(row[tCallPct]||0)*100,
+      target:+row[tTarget]||0, appos:+row[tAppo]||0,
+      runrate:+(row[tRunrate]||0), avgAppo:+row[tAvgAppo]||0,
+      homeVisit:+row[tHV]||0
+    });
+  }
+
+  // Rep detail block
+  const repHeaderIdx = rows.findIndex((r,i)=> i>teamHeaderIdx && r && r.some(c=>normWS(c).toLowerCase()==='name') && r.some(c=>normWS(c).toLowerCase().includes('team')));
+  const repRows = [];
+  if(repHeaderIdx>=0){
+    const repHdr = rows[repHeaderIdx].map(h=>normWS(h));
+    const rIdx = h => repHdr.findIndex(x=>x.toLowerCase().includes(h.toLowerCase()));
+    const rName=rIdx('Name'), rTeam=rIdx('Team'), rDials=rIdx('Total Dial'), rConn=rIdx('Connected'),
+          rCallMin=rIdx('Call Time (In Min'), rCallPct=rIdx('Call Time %'), rAppo=rIdx('Appointment'),
+          rHV=rIdx('Home Visit'), rStatus=rIdx('Status');
+    for(let r=repHeaderIdx+1; r<rows.length; r++){
+      const row=rows[r];
+      if(!row||row.every(v=>v===null||v===''||v===undefined)) break;
+      const nm=normWS(row[rName]); if(!nm) break;
+      repRows.push({
+        name:nm, team:normWS(row[rTeam]),
+        dials:+row[rDials]||0, connected:+row[rConn]||0,
+        callMin:+row[rCallMin]||0, callPct:+(row[rCallPct]||0)*100,
+        appos:+row[rAppo]||0, homeVisit:+row[rHV]||0,
+        status:normWS(row[rStatus]||'P').toUpperCase()
+      });
+    }
+  }
+
+  // Try to get date from filename if not found in data
+  if(date==='Unknown'){
+    const m = fileName.match(/\d{1,2}[\s_-]?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d{1,2})[\s_-]?\d{2,4}/i);
+    if(m) date = m[0];
+    else {
+      const m2 = fileName.match(/(\d{1,2})[_\-\s](\d{1,2})[_\-\s](\d{2,4})/);
+      if(m2) date = `${m2[1]}/${m2[2]}/${m2[3]}`;
+      else date = fileName.replace(/\.xlsx?|\.csv/i,'').slice(-12);
+    }
+  }
+
+  return { name:fileName, date, teams:teamRows, reps:repRows };
+}
+
+// ═══════════════════════════════════════════════════════
+//  LAUNCH
+// ═══════════════════════════════════════════════════════
+function launchDash(){
+  const loaded = slots.map((s,i)=>({s,i})).filter(x=>x.s!==null);
+  if(!loaded.length){ alert('Upload at least one file.'); return; }
+  activeDay = loaded[0].i;
+  document.getElementById('uploadScreen').style.display='none';
+  document.getElementById('dashWrap').style.display='block';
+  buildDayBadges();
+  initTeamFilter();
+  render();
+}
+
+function resetDash(){
+  slots=[null,null,null,null,null];
+  Object.values(charts).forEach(c=>c.destroy()); charts={};
+  document.getElementById('dashWrap').style.display='none';
+  document.getElementById('uploadScreen').style.display='flex';
+  for(let i=0;i<5;i++) clearSlot(i);
+}
+
+function buildDayBadges(){
+  const wrap=document.getElementById('dayBadges'); wrap.innerHTML='';
+  slots.forEach((s,i)=>{
+    if(!s) return;
+    const b=document.createElement('span');
+    b.className='day-badge '+(i===activeDay?'active-day':'inactive-day');
+    b.textContent='◉ '+s.date;
+    b.onclick=()=>{ activeDay=i; buildDayBadges(); initTeamFilter(); render(); };
+    wrap.appendChild(b);
+  });
+}
+
+function initTeamFilter(){
+  const d=slots[activeDay]; if(!d) return;
+  const teams=['All',...d.teams.map(t=>t.team)];
+  const pp=document.getElementById('teamPills'); pp.innerHTML='';
+  teams.forEach(t=>{
+    const b=document.createElement('button');
+    b.className='pill'+(t==='All'?' active':'');
+    b.textContent=t; b.onclick=()=>toggleTeam(t); pp.appendChild(b);
+  });
+  selectedTeams=new Set(['All']);
+}
+
+function toggleTeam(t){
+  const pills=document.querySelectorAll('#teamPills .pill');
+  if(t==='All'){ selectedTeams=new Set(['All']); pills.forEach(p=>p.classList.toggle('active',p.textContent==='All')); }
+  else{
+    selectedTeams.delete('All');
+    pills.forEach(p=>{ if(p.textContent==='All') p.classList.remove('active'); });
+    selectedTeams.has(t)?selectedTeams.delete(t):selectedTeams.add(t);
+    pills.forEach(p=>{ if(p.textContent===t) p.classList.toggle('active',selectedTeams.has(t)); });
+    if(selectedTeams.size===0){ selectedTeams.add('All'); pills.forEach(p=>{ if(p.textContent==='All') p.classList.add('active'); }); }
+  }
+  render();
+}
+
+function switchView(v){
+  currentView=v;
+  ['team','reps','insights','attendance','trend'].forEach(id=>{
+    document.getElementById('view-'+id).style.display=id===v?'block':'none';
+    document.getElementById('tab-'+id).classList.toggle('active',id===v);
+  });
+  render();
+}
+
+// ═══════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════
+function mkChart(id,type,labels,datasets,extraOpts={}){
+  if(charts[id]){ charts[id].destroy(); delete charts[id]; }
+  const canvas=document.getElementById(id); if(!canvas) return;
+  charts[id]=new Chart(canvas,{type,data:{labels,datasets},options:{responsive:true,maintainAspectRatio:false,animation:{duration:400},plugins:{legend:LEGEND,tooltip:TOOLTIP},scales:type==='doughnut'||type==='pie'?{}:BASE_SCALE,...extraOpts}});
+}
+function fmtN(v){ return v===null||v===undefined||isNaN(v)?'—':Math.round(v).toLocaleString(); }
+function fmtP(v){ return v===null||v===undefined||isNaN(v)?'—':v.toFixed(1)+'%'; }
+function fmtD(prev,curr){
+  if(prev===null||prev===undefined) return '<span class="neu">—</span>';
+  const d=curr-prev; const s=d>=0?'+':'';
+  return`<span class="${d>0?'up':d<0?'dn':'neu'}">${s}${fmtN(d)}</span>`;
+}
+function fmtDP(prev,curr){
+  if(prev===null||prev===undefined) return '<span class="neu">—</span>';
+  const d=curr-prev; const s=d>=0?'+':'';
+  return`<span class="${d>0.3?'up':d<-0.3?'dn':'neu'}">${s}${d.toFixed(1)}pp</span>`;
+}
+function connRate(row){ return row.dials?row.connected/row.dials*100:0; }
+function appoEff(row){ return row.connected?row.appos/row.connected*100:0; }
+function achPct(row){ return row.target?row.appos/row.target*100:0; }
+function totalFor(key){ return filteredTeams().reduce((s,t)=>s+(t[key]||0),0); }
+
+function filteredTeams(){
+  const d=slots[activeDay]; if(!d) return [];
+  return d.teams.filter(t=>selectedTeams.has('All')||selectedTeams.has(t.team));
+}
+function filteredReps(){
+  const d=slots[activeDay]; if(!d) return [];
+  return d.reps.filter(r=>selectedTeams.has('All')||selectedTeams.has(r.team));
+}
+
+function sortRows(rows, col, asc){
+  return [...rows].sort((a,b)=>{
+    let va=a[col], vb=b[col];
+    if(typeof va==='string'&&typeof vb==='string') return asc?va.localeCompare(vb):vb.localeCompare(va);
+    return asc?(va-vb):(vb-va);
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════════════════
+function render(){
+  if(currentView==='team') renderTeam();
+  if(currentView==='reps') renderReps();
+  if(currentView==='insights') renderInsights();
+  if(currentView==='attendance') renderAttendance();
+  if(currentView==='trend') renderTrend();
+}
+
+// ── TEAM SUMMARY ──
+function renderTeam(){
+  const teams=filteredTeams(); if(!teams.length) return;
+  const tot={
+    cc:totalFor('cc'), dials:totalFor('dials'), connected:totalFor('connected'),
+    callMin:totalFor('callMin'), target:totalFor('target'), appos:totalFor('appos'),
+    homeVisit:totalFor('homeVisit')
+  };
+  const totConnRate=tot.dials?tot.connected/tot.dials*100:0;
+  const totAch=tot.target?tot.appos/tot.target*100:0;
+
+  document.getElementById('teamKpiStrip').innerHTML=[
+    {lbl:'Total Dials',val:fmtN(tot.dials),sub:`${fmtN(tot.cc)} active CCs`,color:''},
+    {lbl:'Connected Calls',val:fmtN(tot.connected),sub:`Connection Rate ${fmtP(totConnRate)}`,color:totConnRate<30?'r':totConnRate<45?'w':'g'},
+    {lbl:'Appointments',val:fmtN(tot.appos),sub:`Target: ${fmtN(tot.target)}`,color:totAch>=100?'g':totAch>=60?'w':'r'},
+    {lbl:'Target Ach %',val:fmtP(totAch),sub:'Appos ÷ Appo Target',color:totAch>=100?'g':totAch>=60?'w':'r'},
+    {lbl:'Call Time',val:fmtN(tot.callMin)+' min',sub:`${(tot.callMin/60).toFixed(1)} hours total`,color:''},
+    {lbl:'Home Visits',val:fmtN(tot.homeVisit),sub:'Field conversion',color:tot.homeVisit>0?'p':''},
+  ].map(c=>`<div class="kpi ${c.color}"><div class="kpi-lbl">${c.lbl}</div><div class="kpi-val">${c.val}</div><div class="kpi-sub">${c.sub}</div></div>`).join('');
+
+  // Table
+  const sorted = sortCol ? sortRows(teams.map(t=>({...t,connRate:connRate(t),appoEff:appoEff(t),ach:achPct(t)})),sortCol,sortAsc) : teams.map(t=>({...t,connRate:connRate(t),appoEff:appoEff(t),ach:achPct(t)}));
+  const cols=[
+    {k:'team',l:'Team',num:false},{k:'cc',l:'CCs',num:true},{k:'dials',l:'Dials',num:true},
+    {k:'avgDial',l:'Avg Dial',num:true},{k:'connected',l:'Connected',num:true},
+    {k:'connRate',l:'Conn %',num:true},{k:'callMin',l:'Call Min',num:true},
+    {k:'target',l:'Target',num:true},{k:'appos',l:'Appos',num:true},
+    {k:'ach',l:'Ach %',num:true},{k:'runrate',l:'Run Rate',num:true},
+    {k:'avgAppo',l:'Avg Appo',num:true},{k:'homeVisit',l:'HV',num:true}
+  ];
+  const thead=`<thead><tr>${cols.map(c=>`<th class="${c.num?'num':''}" onclick="setSortTeam('${c.k}')" title="Sort by ${c.l}">${c.l}${sortCol===c.k?(sortAsc?'▲':'▼'):''}</th>`).join('')}</tr></thead>`;
+  const maxAch=Math.max(...sorted.map(t=>t.ach),1);
+  const tbody=sorted.map(t=>{
+    const achC=t.ach>=100?'heat-hi':t.ach>=60?'heat-md':'heat-lo';
+    const connC=t.connRate>=45?'heat-hi':t.connRate>=30?'heat-md':'heat-lo';
+    const w=(t.ach/maxAch*70).toFixed(0);
+    return`<tr>
+      <td class="lbl">${t.team}</td>
+      <td class="num">${t.cc}</td><td class="num">${fmtN(t.dials)}</td><td class="num">${t.avgDial}</td>
+      <td class="num">${fmtN(t.connected)}</td>
+      <td class="num"><span class="heat ${connC}">${fmtP(t.connRate)}</span></td>
+      <td class="num">${fmtN(t.callMin)}</td>
+      <td class="num">${t.target}</td><td class="num">${t.appos}</td>
+      <td class="num"><span class="heat ${achC}">${fmtP(t.ach)}<span class="bar-inline" style="width:${w}px;background:${t.ach>=100?'var(--green)':t.ach>=60?'var(--warn)':'var(--danger)'}"></span></span></td>
+      <td class="num">${t.runrate.toFixed(2)}</td><td class="num">${t.avgAppo}</td><td class="num">${t.homeVisit}</td>
+    </tr>`;
+  }).join('');
+  const totRow=`<tr class="total-row">
+    <td class="lbl">TOTAL</td>
+    <td class="num">${tot.cc}</td><td class="num">${fmtN(tot.dials)}</td><td class="num">—</td>
+    <td class="num">${fmtN(tot.connected)}</td>
+    <td class="num"><span class="heat ${totConnRate>=45?'heat-hi':totConnRate>=30?'heat-md':'heat-lo'}">${fmtP(totConnRate)}</span></td>
+    <td class="num">${fmtN(tot.callMin)}</td>
+    <td class="num">${tot.target}</td><td class="num">${tot.appos}</td>
+    <td class="num"><span class="heat ${totAch>=100?'heat-hi':totAch>=60?'heat-md':'heat-lo'}">${fmtP(totAch)}</span></td>
+    <td class="num">—</td><td class="num">—</td><td class="num">${tot.homeVisit}</td>
+  </tr>`;
+  document.getElementById('teamTable').innerHTML=thead+`<tbody>${tbody}${totRow}</tbody>`;
+
+  // Charts
+  const grid=document.getElementById('teamChartsGrid');
+  grid.innerHTML=[
+    {id:'c_appo_bar',title:'Appointments vs Target by Team',sub:'Green = met target'},
+    {id:'c_conn_rate',title:'Connection Rate % by Team',sub:'Connected Calls ÷ Total Dials'},
+    {id:'c_dials_bar',title:'Total Dials by Team',sub:'Volume of outreach'},
+    {id:'c_ach_bar',title:'Target Achievement % by Team',sub:'Appointments ÷ Appo Target'},
+    {id:'c_callmin_bar',title:'Total Call Time (mins) by Team',sub:''},
+    {id:'c_hv_bar',title:'Home Visits by Team',sub:'Field conversion activity'},
+  ].map(c=>`<div class="chart-card"><div class="ct">${c.title}</div><div class="cs">${c.sub||' '}</div><div class="cw"><canvas id="${c.id}"></canvas></div></div>`).join('');
+
+  const lbls=sorted.map(t=>t.team);
+  mkChart('c_appo_bar','bar',lbls,[
+    {label:'Appointments',data:sorted.map(t=>t.appos),backgroundColor:'#4f7cff88',borderColor:'#4f7cff',borderWidth:1.5},
+    {label:'Target',data:sorted.map(t=>t.target),backgroundColor:'#fbbf2444',borderColor:'#fbbf24',borderWidth:1.5,type:'line',tension:.3}
+  ]);
+  mkChart('c_conn_rate','bar',lbls,[{label:'Connection %',data:sorted.map(t=>t.connRate),backgroundColor:sorted.map(t=>t.connRate>=45?'#00e5a088':t.connRate>=30?'#ff6b3588':'#ff3b5c88'),borderColor:sorted.map(t=>t.connRate>=45?'#00e5a0':t.connRate>=30?'#ff6b35':'#ff3b5c'),borderWidth:1.5}]);
+  mkChart('c_dials_bar','bar',lbls,[{label:'Dials',data:sorted.map(t=>t.dials),backgroundColor:'#a855f788',borderColor:'#a855f7',borderWidth:1.5}]);
+  mkChart('c_ach_bar','bar',lbls,[{label:'Achievement %',data:sorted.map(t=>t.ach),backgroundColor:sorted.map(t=>t.ach>=100?'#00e5a088':t.ach>=60?'#ff6b3588':'#ff3b5c88'),borderColor:sorted.map(t=>t.ach>=100?'#00e5a0':t.ach>=60?'#ff6b35':'#ff3b5c'),borderWidth:1.5}],{scales:{...BASE_SCALE,y:{...BASE_SCALE.y,ticks:{...BASE_SCALE.y.ticks,callback:v=>v+'%'}}}});
+  mkChart('c_callmin_bar','bar',lbls,[{label:'Call Mins',data:sorted.map(t=>t.callMin),backgroundColor:'#06b6d488',borderColor:'#06b6d4',borderWidth:1.5}]);
+  mkChart('c_hv_bar','bar',lbls,[{label:'Home Visits',data:sorted.map(t=>t.homeVisit),backgroundColor:'#fbbf2488',borderColor:'#fbbf24',borderWidth:1.5}]);
+}
+
+let sortColTeam=null, sortAscTeam=true;
+function setSortTeam(col){ sortColTeam===col?sortAscTeam=!sortAscTeam:(sortColTeam=col,sortAscTeam=false); sortCol=sortColTeam; sortAsc=sortAscTeam; renderTeam(); }
+
+// ── REP LEADERBOARD ──
+let sortColRep=null, sortAscRep=false;
+function renderReps(){
+  const reps=filteredReps(); if(!reps.length){ document.getElementById('repKpiStrip').innerHTML='<div style="color:var(--muted);font-size:12px">No rep detail data in this file.</div>'; return; }
+  const tot={dials:0,connected:0,callMin:0,appos:0,homeVisit:0,count:reps.length};
+  reps.forEach(r=>{tot.dials+=r.dials;tot.connected+=r.connected;tot.callMin+=r.callMin;tot.appos+=r.appos;tot.homeVisit+=r.homeVisit;});
+  const totConn=tot.dials?tot.connected/tot.dials*100:0;
+
+  document.getElementById('repKpiStrip').innerHTML=[
+    {lbl:'Reps Included',val:fmtN(tot.count),sub:'In filter',color:''},
+    {lbl:'Total Dials',val:fmtN(tot.dials),sub:`Avg ${fmtN(tot.dials/tot.count)} per rep`,color:''},
+    {lbl:'Avg Connection %',val:fmtP(totConn),sub:`${fmtN(tot.connected)} total`,color:totConn>=45?'g':totConn>=30?'w':'r'},
+    {lbl:'Total Appos',val:fmtN(tot.appos),sub:`Avg ${(tot.appos/tot.count).toFixed(1)}/rep`,color:tot.appos>0?'g':'r'},
+    {lbl:'Home Visits',val:fmtN(tot.homeVisit),sub:`Avg ${(tot.homeVisit/tot.count).toFixed(1)}/rep`,color:'p'},
+  ].map(c=>`<div class="kpi ${c.color}"><div class="kpi-lbl">${c.lbl}</div><div class="kpi-val">${c.val}</div><div class="kpi-sub">${c.sub}</div></div>`).join('');
+
+  const enriched=reps.map(r=>({...r,connRate:r.dials?r.connected/r.dials*100:0,appoEff:r.connected?r.appos/r.connected*100:0}));
+  const sorted=sortColRep?sortRows(enriched,sortColRep,sortAscRep):enriched;
+
+  const cols=[
+    {k:'name',l:'Rep',num:false},{k:'team',l:'Team',num:false},{k:'dials',l:'Dials',num:true},
+    {k:'connected',l:'Connected',num:true},{k:'connRate',l:'Conn %',num:true},
+    {k:'callMin',l:'Call Min',num:true},{k:'appos',l:'Appos',num:true},
+    {k:'appoEff',l:'Appo/Conn%',num:true},{k:'homeVisit',l:'HV',num:true},{k:'status',l:'Status',num:false}
+  ];
+  const thead=`<thead><tr>${cols.map(c=>`<th class="${c.num?'num':''}" onclick="setSortRep('${c.k}')">${c.l}${sortColRep===c.k?(sortAscRep?'▲':'▼'):''}</th>`).join('')}</tr></thead>`;
+  const statusColor={'P':'status-p','WFH':'status-wfh','L':'status-l','HL':'status-hl','CO':'status-co','H':'status-h'};
+  const tbody=sorted.map(r=>{
+    const connC=r.connRate>=45?'heat-hi':r.connRate>=30?'heat-md':'heat-lo';
+    const appoC=r.appos>=4?'heat-hi':r.appos>=2?'heat-md':'heat-lo';
+    const sc=statusColor[r.status]||'';
+    return`<tr>
+      <td class="lbl">${r.name}</td>
+      <td>${r.team}</td>
+      <td class="num">${r.dials}</td>
+      <td class="num">${r.connected}</td>
+      <td class="num"><span class="heat ${connC}">${fmtP(r.connRate)}</span></td>
+      <td class="num">${r.callMin}</td>
+      <td class="num"><span class="heat ${appoC}">${r.appos}</span></td>
+      <td class="num">${fmtP(r.appoEff)}</td>
+      <td class="num">${r.homeVisit}</td>
+      <td><span class="${sc}" style="font-family:var(--mono);font-size:10px;font-weight:600">${r.status}</span></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('repTable').innerHTML=thead+`<tbody>${tbody}</tbody>`;
+
+  // Charts
+  const grid=document.getElementById('repChartsGrid');
+  const top10appo=[...enriched].sort((a,b)=>b.appos-a.appos).slice(0,12);
+  const top10dials=[...enriched].sort((a,b)=>b.dials-a.dials).slice(0,12);
+  grid.innerHTML=[
+    {id:'r_appo_top',title:'Top Reps — Appointments',sub:'Highest appointment makers today',wide:true},
+    {id:'r_dials_top',title:'Top Reps — Total Dials',sub:'Highest dial volume today',wide:true},
+    {id:'r_conn_scatter',title:'Connection Rate by Rep',sub:'Higher = better lead quality or smarter dialing',wide:false},
+    {id:'r_appoeff',title:'Appo Conversion Rate (Appos / Connected)',sub:'Quality of connected conversations',wide:false},
+  ].map(c=>`<div class="chart-card${c.wide?' wide':''}"><div class="ct">${c.title}</div><div class="cs">${c.sub}</div><div class="cw${c.wide?' tall':''}"><canvas id="${c.id}"></canvas></div></div>`).join('');
+
+  mkChart('r_appo_top','bar',top10appo.map(r=>r.name),[{label:'Appos',data:top10appo.map(r=>r.appos),backgroundColor:top10appo.map(r=>r.appos>=4?'#00e5a088':r.appos>=2?'#ff6b3588':'#ff3b5c88'),borderColor:top10appo.map(r=>r.appos>=4?'#00e5a0':r.appos>=2?'#ff6b35':'#ff3b5c'),borderWidth:1.5}],{indexAxis:'y',plugins:{legend:{display:false},tooltip:TOOLTIP}});
+  mkChart('r_dials_top','bar',top10dials.map(r=>r.name),[{label:'Dials',data:top10dials.map(r=>r.dials),backgroundColor:'#4f7cff88',borderColor:'#4f7cff',borderWidth:1.5}],{indexAxis:'y',plugins:{legend:{display:false},tooltip:TOOLTIP}});
+
+  const connSorted=[...enriched].filter(r=>r.dials>20).sort((a,b)=>b.connRate-a.connRate).slice(0,15);
+  mkChart('r_conn_scatter','bar',connSorted.map(r=>r.name.split(' ')[0]),[{label:'Conn%',data:connSorted.map(r=>r.connRate),backgroundColor:connSorted.map(r=>r.connRate>=45?'#00e5a088':'#4f7cff88'),borderColor:connSorted.map(r=>r.connRate>=45?'#00e5a0':'#4f7cff'),borderWidth:1.5}],{plugins:{legend:{display:false},tooltip:TOOLTIP}});
+  const effSorted=[...enriched].filter(r=>r.connected>5).sort((a,b)=>b.appoEff-a.appoEff).slice(0,15);
+  mkChart('r_appoeff','bar',effSorted.map(r=>r.name.split(' ')[0]),[{label:'Appo Eff%',data:effSorted.map(r=>r.appoEff),backgroundColor:'#a855f788',borderColor:'#a855f7',borderWidth:1.5}],{plugins:{legend:{display:false},tooltip:TOOLTIP}});
+}
+function setSortRep(col){ sortColRep===col?sortAscRep=!sortAscRep:(sortColRep=col,sortAscRep=false); renderReps(); }
+
+// ── AUTO INSIGHTS ──
+function renderInsights(){
+  const teams=filteredTeams(); const reps=filteredReps();
+  if(!teams.length){ document.getElementById('narrativeBox').innerHTML='<h3>No data</h3>'; document.getElementById('insightGrid').innerHTML=''; return; }
+
+  const ins=[];
+  const push=(impact,type,tag,text,action)=>ins.push({impact,type,tag,text,action});
+  const tot={dials:totalFor('dials'),connected:totalFor('connected'),appos:totalFor('appos'),target:totalFor('target'),cc:totalFor('cc'),callMin:totalFor('callMin'),homeVisit:totalFor('homeVisit')};
+  const totConn=tot.dials?tot.connected/tot.dials*100:0;
+  const totAch=tot.target?tot.appos/tot.target*100:0;
+
+  // ── 1. Overall Achievement ──
+  push(totAch<60?'hi':totAch<85?'md':'lo',
+    totAch>=100?'pos':totAch<60?'dng':'warn','Overall Target Achievement',
+    `Grand total: <b>${fmtN(tot.appos)}</b> appointments against <b>${fmtN(tot.target)}</b> target → <b>${fmtP(totAch)} achievement</b> across ${fmtN(tot.cc)} active CCs. Total dials: ${fmtN(tot.dials)}, connected: ${fmtN(tot.connected)} (${fmtP(totConn)} connection rate).`,
+    totAch>=100?'→ Target met! Analyse which teams and reps drove the surplus — replicate their playbook.'
+      :totAch<60?`→ Critical gap: ${fmtN(tot.target-tot.appos)} appointments short. Review team-level breakdown immediately.`
+      :`→ On track but ${fmtN(tot.target-tot.appos)} appointments short. Identify which teams can still close the gap today.`
+  );
+
+  // ── 2. Best and worst team achievement ──
+  const teamEnriched=teams.map(t=>({...t,ach:achPct(t),connR:connRate(t)})).filter(t=>t.target>0);
+  if(teamEnriched.length>=2){
+    const best=teamEnriched.reduce((a,b)=>a.ach>b.ach?a:b);
+    const worst=teamEnriched.reduce((a,b)=>a.ach<b.ach?a:b);
+    push(best.ach-worst.ach>40?'hi':best.ach-worst.ach>20?'md':'lo',
+      worst.ach<50?'dng':'warn','Team Achievement Spread',
+      `Best performing team: <b>${best.team}</b> at <b>${fmtP(best.ach)}</b> (${best.appos}/${best.target} appos). Weakest: <b>${worst.team}</b> at <b>${fmtP(worst.ach)}</b> (${worst.appos}/${worst.target} appos). Spread: <b>${(best.ach-worst.ach).toFixed(0)}pp</b>.`,
+      `→ ${worst.team} needs immediate diagnosis — is it a dialling problem, a connection problem, or a conversion problem?`
+    );
+  }
+
+  // ── 3. Connection Rate outliers ──
+  const connSorted=[...teamEnriched].sort((a,b)=>b.connR-a.connR);
+  if(connSorted.length>=2){
+    const hiConn=connSorted[0], loConn=connSorted[connSorted.length-1];
+    push(hiConn.connR-loConn.connR>20?'hi':'md',
+      loConn.connR<25?'dng':'info','Connection Rate Gap',
+      `Highest connection rate: <b>${hiConn.team} at ${fmtP(hiConn.connR)}</b> (${fmtN(hiConn.connected)} of ${fmtN(hiConn.dials)} dials). Lowest: <b>${loConn.team} at ${fmtP(loConn.connR)}</b> (${fmtN(loConn.connected)} of ${fmtN(loConn.dials)} dials). Gap: ${(hiConn.connR-loConn.connR).toFixed(1)}pp.`,
+      loConn.connR<25?`→ ${loConn.team} has very low connection rate — check if they're dialling bad numbers, wrong time slots, or have list quality issues.`
+        :`→ Share ${hiConn.team}'s dialling timing and list strategy with lower-performing teams.`
+    );
+  }
+
+  // ── 4. Dial Efficiency (dials per CC) ──
+  const dialEff=teams.map(t=>({...t,dpp:t.cc?t.dials/t.cc:0})).sort((a,b)=>b.dpp-a.dpp);
+  if(dialEff.length>=2){
+    const hi=dialEff[0], lo=dialEff[dialEff.length-1];
+    push(hi.dpp-lo.dpp>60?'md':'lo','info','Dial Volume Efficiency (Dials per CC)',
+      `Highest dials/CC: <b>${hi.team} — ${fmtN(hi.dpp)} avg</b> (${fmtN(hi.dials)} across ${hi.cc} reps). Lowest: <b>${lo.team} — ${fmtN(lo.dpp)} avg</b> (${fmtN(lo.dials)} across ${lo.cc} reps). Gap: ${fmtN(hi.dpp-lo.dpp)} dials.`,
+      `→ ${lo.team} may have low-activity reps or attendance issues pulling the average down. Cross-check with attendance view.`
+    );
+  }
+
+  // ── 5. Call Time Efficiency ──
+  const callEff=teams.map(t=>({...t,minPerAppo:t.appos>0?t.callMin/t.appos:t.callMin})).sort((a,b)=>a.minPerAppo-b.minPerAppo);
+  if(callEff.length>=2){
+    const eff=callEff[0], ineff=callEff[callEff.length-1];
+    push('md','info','Call Time per Appointment',
+      `Most time-efficient: <b>${eff.team} — ${fmtN(eff.minPerAppo)} min/appo</b>. Least efficient: <b>${ineff.team} — ${ineff.appos>0?fmtN(ineff.minPerAppo)+'min/appo':'no appos despite '+fmtN(ineff.callMin)+' call mins'}</b>.`,
+      ineff.appos===0?`→ ${ineff.team} spent ${fmtN(ineff.callMin)} minutes on calls but set zero appointments. Review call quality and conversion scripts urgently.`
+        :`→ ${eff.team}'s shorter call-per-appo time suggests efficient qualification. Study their scripts.`
+    );
+  }
+
+  // ── 6. Zero-appointment teams ──
+  const zeroAppo=teams.filter(t=>t.appos===0&&t.target>0);
+  if(zeroAppo.length){
+    push('hi','dng','Zero Appointments — Action Required',
+      `<b>${zeroAppo.length} team(s) have zero appointments</b> despite having targets: ${zeroAppo.map(t=>`<b>${t.team}</b> (target: ${t.target})`).join(', ')}.`,
+      `→ Escalate immediately. Check attendance, CRM access, and whether these teams are dialling. This is today's biggest risk.`
+    );
+  }
+
+  // ── 7. Rep-level: zero appo high-diallers ──
+  if(reps.length){
+    const highDialNoAppo=reps.filter(r=>r.dials>=80&&r.appos===0&&['P','WFH'].includes(r.status));
+    if(highDialNoAppo.length){
+      push(highDialNoAppo.length>=3?'hi':'md','dng','High-Dial Reps with Zero Appointments',
+        `<b>${highDialNoAppo.length} rep(s)</b> dialled 80+ times today but booked zero appointments: ${highDialNoAppo.slice(0,5).map(r=>`<b>${r.name}</b> (${r.dials} dials, ${fmtP(connRate(r))} conn)`).join(', ')}${highDialNoAppo.length>5?'…':''}`,
+        `→ High dials + zero appos = conversion problem, not effort problem. Review their call recordings or scripts. They're burning through leads without converting.`
+      );
+    }
+  }
+
+  // ── 8. Home Visit rate ──
+  const hvTeams=teams.filter(t=>t.appos>0).map(t=>({...t,hvRate:t.appos?t.homeVisit/t.appos*100:0})).sort((a,b)=>b.hvRate-a.hvRate);
+  if(hvTeams.length>=2){
+    const hiHV=hvTeams[0];
+    push('lo','info','Home Visit Conversion',
+      `Top home-visit team: <b>${hiHV.team}</b> — ${fmtN(hiHV.homeVisit)} HVs from ${fmtN(hiHV.appos)} appos (${fmtP(hiHV.hvRate)} HV rate). Total HVs today: <b>${fmtN(tot.homeVisit)}</b>.`,
+      `→ Home visits typically have higher close rates. Track HV → sale pipeline separately to measure true field ROI.`
+    );
+  }
+
+  // ── 9. Winback vs Direct efficiency ──
+  const winbacks=teams.filter(t=>t.team.toLowerCase().includes('winback'));
+  const direct=teams.filter(t=>!t.team.toLowerCase().includes('winback')&&!t.team.toLowerCase().includes('revival'));
+  if(winbacks.length&&direct.length){
+    const wbConn=winbacks.reduce((s,t)=>s+t.connected,0)/Math.max(winbacks.reduce((s,t)=>s+t.dials,0),1)*100;
+    const drConn=direct.reduce((s,t)=>s+t.connected,0)/Math.max(direct.reduce((s,t)=>s+t.dials,0),1)*100;
+    const wbAch=winbacks.reduce((s,t)=>s+t.appos,0)/Math.max(winbacks.reduce((s,t)=>s+t.target,0),1)*100;
+    const drAch=direct.reduce((s,t)=>s+t.appos,0)/Math.max(direct.reduce((s,t)=>s+t.target,0),1)*100;
+    push('md','info','Winback vs Direct Teams',
+      `Winback teams avg connection rate: <b>${fmtP(wbConn)}</b> (vs direct teams: ${fmtP(drConn)}). Achievement: Winback <b>${fmtP(wbAch)}</b> vs Direct <b>${fmtP(drAch)}</b>. Winback naturally has higher connection rates due to existing customer numbers.`,
+      `→ Don't benchmark Winback connection rates against Direct teams — the list quality is fundamentally different. Use appo-per-CC as the fair comparison metric.`
+    );
+  }
+
+  // ── sort and render ──
+  const order={hi:0,md:1,lo:2};
+  ins.sort((a,b)=>order[a.impact]-order[b.impact]);
+  ins.forEach((x,i)=>x.n=i+1);
+
+  // Narrative
+  const d=slots[activeDay];
+  let narr=`<p>On <b>${d.date}</b>, the sales floor ran <b>${fmtN(tot.dials)}</b> dials across <b>${fmtN(tot.cc)}</b> active CCs, connecting on <b>${fmtN(tot.connected)}</b> calls (${fmtP(totConn)} connection rate). `;
+  narr+=`The team booked <b>${fmtN(tot.appos)}</b> appointments against a target of <b>${fmtN(tot.target)}</b> — <b class="${totAch>=100?'':'neg'}">${fmtP(totAch)} achievement</b>.</p>`;
+  if(teamEnriched.length>=2){
+    const best=teamEnriched.reduce((a,b)=>a.ach>b.ach?a:b);
+    const worst=teamEnriched.reduce((a,b)=>a.ach<b.ach?a:b);
+    narr+=`<p><b>${best.team}</b> led achievement at ${fmtP(best.ach)}, while <b class="neg">${worst.team}</b> trailed at ${fmtP(worst.ach)}. `;
+    narr+=`${fmtN(tot.homeVisit)} home visits were logged — a direct pipeline for in-person conversions.</p>`;
+  }
+  document.getElementById('narrativeBox').innerHTML=`<h3>📖 Daily Executive Narrative</h3>${narr}`;
+  document.getElementById('insightGrid').innerHTML=ins.map(i=>
+    `<div class="ins-card ${i.type}"><div class="ins-tag"><span class="ins-num">${String(i.n).padStart(2,'0')}</span>${i.tag}<span class="impact-dot imp-${i.impact}"></span></div><div class="ins-txt">${i.text}</div><div class="ins-act">${i.action}</div></div>`
+  ).join('');
+}
+
+// ── ATTENDANCE ──
+function renderAttendance(){
+  const reps=filteredReps();
+  if(!reps.length){ document.getElementById('attKpiStrip').innerHTML='<div style="color:var(--muted);font-size:12px">No rep detail data in this file.</div>'; document.getElementById('attTable').innerHTML=''; return; }
+
+  const statusMap={'P':'Present','WFH':'Work From Home','L':'Leave','HL':'Half Leave','CO':'Comp Off','H':'Other'};
+  const counts={P:0,WFH:0,L:0,HL:0,CO:0,H:0};
+  reps.forEach(r=>{ const s=r.status; if(counts[s]!==undefined) counts[s]++; else counts.H++; });
+  const total=reps.length;
+  const active=counts.P+counts.WFH;
+
+  document.getElementById('attKpiStrip').innerHTML=[
+    {lbl:'Total Reps',val:fmtN(total),sub:'In filter',color:''},
+    {lbl:'Active Today',val:fmtN(active),sub:`P + WFH (${fmtP(active/total*100)})`,color:active/total>=0.8?'g':active/total>=0.6?'w':'r'},
+    {lbl:'On Leave',val:fmtN(counts.L),sub:'Full leave',color:counts.L>0?'r':'g'},
+    {lbl:'WFH',val:fmtN(counts.WFH),sub:'Remote today',color:'p'},
+    {lbl:'Half Leave / CO',val:fmtN(counts.HL+counts.CO),sub:'Partial availability',color:'w'},
+  ].map(c=>`<div class="kpi ${c.color}"><div class="kpi-lbl">${c.lbl}</div><div class="kpi-val">${c.val}</div><div class="kpi-sub">${c.sub}</div></div>`).join('');
+
+  // Group by team
+  const teamMap=new Map();
+  reps.forEach(r=>{
+    if(!teamMap.has(r.team)) teamMap.set(r.team,{team:r.team,P:0,WFH:0,L:0,HL:0,CO:0,H:0,total:0});
+    const t=teamMap.get(r.team); t.total++;
+    const s=r.status; if(t[s]!==undefined) t[s]++; else t.H++;
+  });
+  const teamRows=[...teamMap.values()].sort((a,b)=>b.total-a.total);
+
+  const thead=`<thead><tr><th>Team</th><th class="num">Total</th><th class="num">Present</th><th class="num">WFH</th><th class="num">Leave</th><th class="num">Half Leave</th><th class="num">Comp Off</th><th class="num">Active %</th></tr></thead>`;
+  const tbody=teamRows.map(t=>{
+    const actPct=(t.P+t.WFH)/t.total*100;
+    const c=actPct>=80?'heat-hi':actPct>=60?'heat-md':'heat-lo';
+    return`<tr>
+      <td class="lbl">${t.team}</td><td class="num">${t.total}</td>
+      <td class="num"><span class="status-p" style="font-weight:600">${t.P}</span></td>
+      <td class="num"><span class="status-wfh">${t.WFH}</span></td>
+      <td class="num"><span class="status-l">${t.L}</span></td>
+      <td class="num"><span class="status-hl">${t.HL}</span></td>
+      <td class="num"><span class="status-co">${t.CO}</span></td>
+      <td class="num"><span class="heat ${c}">${fmtP(actPct)}</span></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('attTable').innerHTML=thead+`<tbody>${tbody}</tbody>`;
+
+  const grid=document.getElementById('attChartsGrid');
+  grid.innerHTML=[
+    {id:'a_status_pie',title:'Attendance Distribution',sub:'All reps — today'},
+    {id:'a_active_team',title:'Active % by Team',sub:'Present + WFH'},
+  ].map(c=>`<div class="chart-card"><div class="ct">${c.title}</div><div class="cs">${c.sub}</div><div class="cw"><canvas id="${c.id}"></canvas></div></div>`).join('');
+
+  const statLabels=Object.keys(counts).filter(k=>counts[k]>0);
+  const statColors={'P':'#00e5a0','WFH':'#06b6d4','L':'#ff3b5c','HL':'#ff6b35','CO':'#a855f7','H':'#fbbf24'};
+  mkChart('a_status_pie','doughnut',statLabels.map(k=>statusMap[k]||k),[{data:statLabels.map(k=>counts[k]),backgroundColor:statLabels.map(k=>(statColors[k]||'#7a82a0')+'aa'),borderColor:statLabels.map(k=>statColors[k]||'#7a82a0'),borderWidth:1.5}],{plugins:{legend:{position:'bottom',labels:{color:'#7a82a0',font:{family:'IBM Plex Mono',size:9},boxWidth:8}},tooltip:TOOLTIP}});
+  mkChart('a_active_team','bar',teamRows.map(t=>t.team),[{label:'Active %',data:teamRows.map(t=>(t.P+t.WFH)/t.total*100),backgroundColor:teamRows.map(t=>{const p=(t.P+t.WFH)/t.total*100;return p>=80?'#00e5a088':p>=60?'#ff6b3588':'#ff3b5c88';}),borderColor:teamRows.map(t=>{const p=(t.P+t.WFH)/t.total*100;return p>=80?'#00e5a0':p>=60?'#ff6b35':'#ff3b5c';}),borderWidth:1.5}],{plugins:{legend:{display:false},tooltip:TOOLTIP}});
+}
+
+// ── MULTI-DAY TREND ──
+function renderTrend(){
+  const loaded=slots.filter(s=>s!==null);
+  if(loaded.length<2){
+    document.getElementById('trendNoData').style.display='block';
+    document.getElementById('trendContent').style.display='none';
+    return;
+  }
+  document.getElementById('trendNoData').style.display='none';
+  document.getElementById('trendContent').style.display='block';
+
+  // Per-day grand totals
+  const dayStats=loaded.map(d=>{
+    const teams=selectedTeams.has('All')?d.teams:d.teams.filter(t=>selectedTeams.has(t.team));
+    const tot={date:d.date,dials:0,connected:0,appos:0,target:0,callMin:0,homeVisit:0,cc:0};
+    teams.forEach(t=>{tot.dials+=t.dials;tot.connected+=t.connected;tot.appos+=t.appos;tot.target+=t.target;tot.callMin+=t.callMin;tot.homeVisit+=t.homeVisit;tot.cc+=t.cc;});
+    tot.connRate=tot.dials?tot.connected/tot.dials*100:0;
+    tot.ach=tot.target?tot.appos/tot.target*100:0;
+    return tot;
+  });
+
+  // Latest vs previous day
+  const lat=dayStats[dayStats.length-1], prev=dayStats.length>=2?dayStats[dayStats.length-2]:null;
+  document.getElementById('trendKpiStrip').innerHTML=[
+    {lbl:'Latest Day',val:lat.date,sub:'Active view',color:''},
+    {lbl:'Dials Trend',val:fmtN(lat.dials),sub:prev?`vs ${fmtN(prev.dials)} prev day`:'-',chg:prev?lat.dials-prev.dials:null,color:''},
+    {lbl:'Appos Trend',val:fmtN(lat.appos),sub:prev?`vs ${fmtN(prev.appos)} prev day`:'-',chg:prev?lat.appos-prev.appos:null,color:lat.ach>=100?'g':lat.ach>=60?'w':'r'},
+    {lbl:'Conn Rate Trend',val:fmtP(lat.connRate),sub:prev?`vs ${fmtP(prev.connRate)} prev`:'-',chg:prev?lat.connRate-prev.connRate:null,color:lat.connRate>=45?'g':lat.connRate>=30?'w':'r'},
+    {lbl:'Achievement Trend',val:fmtP(lat.ach),sub:prev?`vs ${fmtP(prev.ach)} prev`:'-',color:lat.ach>=100?'g':lat.ach>=60?'w':'r'},
+  ].map(c=>{
+    let chgHtml='';
+    if(c.chg!==null&&c.chg!==undefined){
+      const s=c.chg>=0?'▲':'▼'; const cc=c.chg>0?'up':c.chg<0?'dn':'neu';
+      chgHtml=`<div class="kpi-chg ${cc}">${s} ${c.chg>=0?'+':''}${typeof c.chg==='number'&&c.chg%1!==0?c.chg.toFixed(1):fmtN(c.chg)}</div>`;
+    }
+    return`<div class="kpi ${c.color}"><div class="kpi-lbl">${c.lbl}</div><div class="kpi-val">${c.val}</div><div class="kpi-sub">${c.sub}</div>${chgHtml}</div>`;
+  }).join('');
+
+  // Trend charts
+  const grid=document.getElementById('trendChartsGrid');
+  grid.innerHTML=[
+    {id:'tr_dials',title:'Dials — Day over Day',sub:'Total dials across all teams'},
+    {id:'tr_appos',title:'Appointments — Day over Day',sub:'vs target line'},
+    {id:'tr_connrate',title:'Connection Rate % — Day over Day',sub:''},
+    {id:'tr_ach',title:'Achievement % — Day over Day',sub:''},
+    {id:'tr_hv',title:'Home Visits — Day over Day',sub:''},
+    {id:'tr_callmin',title:'Call Time (Mins) — Day over Day',sub:''},
+  ].map(c=>`<div class="chart-card"><div class="ct">${c.title}</div><div class="cs">${c.sub||' '}</div><div class="cw"><canvas id="${c.id}"></canvas></div></div>`).join('');
+
+  const dlbls=dayStats.map(d=>d.date);
+  mkChart('tr_dials','line',dlbls,[{label:'Dials',data:dayStats.map(d=>d.dials),borderColor:'#4f7cff',backgroundColor:'#4f7cff22',fill:true,tension:.3,pointRadius:5}]);
+  mkChart('tr_appos','line',dlbls,[
+    {label:'Appos',data:dayStats.map(d=>d.appos),borderColor:'#00e5a0',backgroundColor:'#00e5a022',fill:true,tension:.3,pointRadius:5},
+    {label:'Target',data:dayStats.map(d=>d.target),borderColor:'#fbbf2488',borderDash:[5,5],fill:false,tension:.3,pointRadius:3}
+  ]);
+  mkChart('tr_connrate','line',dlbls,[{label:'Conn%',data:dayStats.map(d=>d.connRate),borderColor:'#a855f7',backgroundColor:'#a855f722',fill:true,tension:.3,pointRadius:5}]);
+  mkChart('tr_ach','line',dlbls,[{label:'Ach%',data:dayStats.map(d=>d.ach),borderColor:'#ff6b35',backgroundColor:'#ff6b3522',fill:true,tension:.3,pointRadius:5}]);
+  mkChart('tr_hv','bar',dlbls,[{label:'Home Visits',data:dayStats.map(d=>d.homeVisit),backgroundColor:'#fbbf2488',borderColor:'#fbbf24',borderWidth:1.5}]);
+  mkChart('tr_callmin','bar',dlbls,[{label:'Call Mins',data:dayStats.map(d=>d.callMin),backgroundColor:'#06b6d488',borderColor:'#06b6d4',borderWidth:1.5}]);
+
+  // Comparison table
+  const prevD=dayStats.length>=2?dayStats[dayStats.length-2]:null;
+  const thead=`<thead><tr><th>Date</th><th class="num">CCs</th><th class="num">Dials</th><th class="num">Δ Dials</th><th class="num">Connected</th><th class="num">Conn %</th><th class="num">Appos</th><th class="num">Δ Appos</th><th class="num">Target</th><th class="num">Ach %</th><th class="num">HV</th><th class="num">Call Mins</th></tr></thead>`;
+  let prevRow=null;
+  const tbody=dayStats.map(d=>{
+    const dD=prevRow?fmtD(prevRow.dials,d.dials):'<span class="neu">—</span>';
+    const dA=prevRow?fmtD(prevRow.appos,d.appos):'<span class="neu">—</span>';
+    const achC=d.ach>=100?'heat-hi':d.ach>=60?'heat-md':'heat-lo';
+    const connC=d.connRate>=45?'heat-hi':d.connRate>=30?'heat-md':'heat-lo';
+    const row=`<tr>
+      <td class="lbl">${d.date}</td><td class="num">${d.cc}</td>
+      <td class="num">${fmtN(d.dials)}</td><td class="num">${dD}</td>
+      <td class="num">${fmtN(d.connected)}</td>
+      <td class="num"><span class="heat ${connC}">${fmtP(d.connRate)}</span></td>
+      <td class="num">${fmtN(d.appos)}</td><td class="num">${dA}</td>
+      <td class="num">${fmtN(d.target)}</td>
+      <td class="num"><span class="heat ${achC}">${fmtP(d.ach)}</span></td>
+      <td class="num">${fmtN(d.homeVisit)}</td><td class="num">${fmtN(d.callMin)}</td>
+    </tr>`;
+    prevRow=d; return row;
+  }).join('');
+  document.getElementById('trendTable').innerHTML=thead+`<tbody>${tbody}</tbody>`;
+}
+
+</script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sales Intelligence Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0f14;--surface:#161a23;--surface2:#1e2330;--border:#2a3047;
+  --accent:#4f7cff;--green:#00e5a0;--warn:#ff6b35;--danger:#ff3b5c;--purple:#a855f7;--gold:#fbbf24;--cyan:#06b6d4;
+  --text:#e8eaf2;--muted:#7a82a0;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-weight:300;line-height:1.5;min-height:100vh}
+
+/* ── UPLOAD SCREEN ── */
+#uploadScreen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:20px;overflow-y:auto}
+.up-hero{text-align:center;margin-bottom:4px}
+.up-logo{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.1em;margin-bottom:8px}
+.up-title{font-size:24px;font-weight:700;margin-bottom:4px}
+.up-sub{font-size:13px;color:var(--muted)}
+.slots-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;width:100%;max-width:900px}
+.slot{border:2px dashed var(--border);border-radius:12px;padding:16px 12px;text-align:center;cursor:pointer;transition:.2s;position:relative;min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+.slot:hover,.slot.drag{border-color:var(--accent);background:#4f7cff0a}
+.slot.loaded{border-color:var(--green);border-style:solid;background:#00e5a008}
+.slot-day{font-family:var(--mono);font-size:10px;color:var(--accent);font-weight:600;text-transform:uppercase;letter-spacing:.08em}
+.slot-icon{font-size:22px}
+.slot-label{font-size:11px;color:var(--muted);line-height:1.4}
+.slot.loaded .slot-label{color:var(--green);font-size:10px}
+.slot-remove{position:absolute;top:6px;right:8px;font-size:14px;color:var(--muted);cursor:pointer;line-height:1}
+.slot-remove:hover{color:var(--danger)}
+input[type=file]{display:none}
+.up-actions{display:flex;gap:12px;align-items:center}
+.up-btn{background:var(--accent);border:none;color:#fff;font-family:var(--mono);font-size:12px;font-weight:600;padding:10px 28px;border-radius:8px;cursor:pointer;letter-spacing:.05em;text-transform:uppercase;transition:.15s}
+.up-btn:hover{opacity:.85}
+.up-btn:disabled{opacity:.4;cursor:not-allowed}
+.up-hint{font-size:11px;color:var(--muted);font-family:var(--mono);max-width:760px;text-align:center;line-height:1.7}
+.up-hint b{color:var(--text)}
+
+/* ── HEADER ── */
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 28px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;flex-wrap:wrap}
+.logo{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--accent);letter-spacing:.08em;margin-right:auto}
+.day-badge{font-family:var(--mono);font-size:10px;padding:3px 10px;border-radius:20px;border:1px solid;cursor:pointer;transition:.15s;white-space:nowrap}
+.day-badge.active-day{background:var(--green);border-color:var(--green);color:#000;font-weight:600}
+.day-badge.inactive-day{border-color:var(--border);color:var(--muted)}
+.day-badge.inactive-day:hover{border-color:var(--accent);color:var(--accent)}
+.reload-btn{font-size:11px;font-family:var(--mono);background:transparent;border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:6px;cursor:pointer}
+.reload-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ── TABS ── */
+.view-tabs{display:flex;gap:0;background:var(--surface2);border-bottom:1px solid var(--border);padding:0 28px;overflow-x:auto}
+.vtab{font-family:var(--mono);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;padding:10px 16px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:.15s;white-space:nowrap}
+.vtab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.vtab:hover:not(.active){color:var(--text)}
+
+/* ── FILTERS ── */
+.filters{display:flex;gap:12px;padding:10px 28px;background:var(--surface2);border-bottom:1px solid var(--border);flex-wrap:wrap;align-items:center}
+.filter-label{font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.pills{display:flex;gap:6px;flex-wrap:wrap}
+.pill{font-family:var(--mono);font-size:10px;padding:3px 10px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:.15s;text-transform:uppercase;letter-spacing:.05em}
+.pill.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.pill:hover:not(.active){border-color:var(--accent);color:var(--accent)}
+
+/* ── MAIN ── */
+.main{padding:20px 28px}
+
+/* ── KPI STRIP ── */
+.kpi-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px;margin-bottom:20px}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--accent)}
+.kpi.g::before{background:var(--green)}.kpi.r::before{background:var(--danger)}.kpi.w::before{background:var(--warn)}.kpi.p::before{background:var(--purple)}
+.kpi-lbl{font-size:10px;color:var(--muted);font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.kpi-val{font-size:22px;font-weight:700;font-family:var(--mono)}
+.kpi-sub{font-size:10px;color:var(--muted);margin-top:3px}
+.kpi-chg{font-size:11px;font-family:var(--mono);margin-top:5px}
+.up{color:var(--green)}.dn{color:var(--danger)}.neu{color:var(--muted)}
+
+/* ── CHARTS ── */
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px;margin-bottom:20px}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px}
+.chart-card.wide{grid-column:1/-1}
+.ct{font-size:11px;font-weight:600;color:var(--text);font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+.cs{font-size:11px;color:var(--muted);margin-bottom:14px}
+.cw{position:relative;height:230px}
+.cw.tall{height:300px}
+
+/* ── TABLES ── */
+.tbl-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;overflow-x:auto;margin-bottom:16px}
+.dtable{width:100%;border-collapse:collapse;font-size:11px}
+.dtable thead th{background:var(--surface2);padding:9px 12px;text-align:left;font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);white-space:nowrap;border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
+.dtable thead th:hover{color:var(--text)}
+.dtable thead th.num{text-align:right}
+.dtable tbody tr{border-bottom:1px solid var(--border);transition:.1s}
+.dtable tbody tr:hover{background:var(--surface2)}
+.dtable tbody tr:last-child{border-bottom:none}
+.dtable tbody tr.total-row{background:var(--surface2);font-weight:600;border-top:2px solid var(--border)}
+.dtable td{padding:8px 12px;white-space:nowrap}
+.dtable td.num{text-align:right;font-family:var(--mono)}
+.dtable td.lbl{font-family:var(--mono);font-weight:600;font-size:10px}
+.bar-inline{display:inline-block;height:5px;border-radius:3px;vertical-align:middle;margin-left:5px}
+
+/* ── INSIGHT CARDS ── */
+.ins-hdr{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.ins-badge{background:linear-gradient(135deg,#4f7cff,#00e5a0);padding:3px 10px;border-radius:20px;font-size:10px;font-family:var(--mono);font-weight:600;color:#fff;text-transform:uppercase;letter-spacing:.08em}
+.ins-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;margin-bottom:24px}
+.ins-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 18px;border-left:3px solid var(--accent)}
+.ins-card.pos{border-left-color:var(--green)}.ins-card.warn{border-left-color:var(--warn)}.ins-card.dng{border-left-color:var(--danger)}.ins-card.info{border-left-color:var(--accent)}
+.ins-num{font-family:var(--mono);font-size:10px;color:var(--accent);font-weight:700;margin-right:6px}
+.ins-tag{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:5px;display:flex;align-items:center}
+.ins-txt{font-size:12px;line-height:1.65}
+.ins-txt b{color:var(--text);font-weight:600}
+.ins-act{margin-top:8px;font-size:11px;color:var(--green);font-style:italic}
+.impact-dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-left:auto}
+.imp-hi{background:var(--danger)}.imp-md{background:var(--warn)}.imp-lo{background:var(--muted)}
+
+/* ── NARRATIVE ── */
+.narrative{background:linear-gradient(135deg,#161a23,#1a1f2e);border:1px solid var(--border);border-radius:12px;padding:22px 26px;margin-bottom:24px;border-left:4px solid var(--accent)}
+.narrative h3{font-size:13px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--accent);margin-bottom:12px}
+.narrative p{font-size:13px;line-height:1.8;margin-bottom:10px;color:var(--text)}
+.narrative p:last-child{margin-bottom:0}
+.narrative b{color:var(--green);font-weight:600}
+.narrative .neg{color:var(--danger)}
+
+/* ── STATUS BADGES ── */
+.status-p{color:var(--green)}.status-wfh{color:var(--cyan)}.status-l{color:var(--danger)}.status-hl{color:var(--warn)}.status-co{color:var(--purple)}.status-h{color:var(--gold)}
+
+/* ── SECTION ── */
+.section-title{font-size:15px;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:10px}
+.section-sub{font-size:11px;color:var(--muted);margin-bottom:14px}
+.mom-section{margin-bottom:28px}
+
+/* ── TREND COMPARE ── */
+.trend-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:20px}
+.trend-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px}
+.trend-metric{font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.trend-vals{display:flex;align-items:flex-end;gap:3px;height:40px}
+.trend-bar-wrap{display:flex;flex-direction:column;align-items:center;gap:2px;flex:1}
+.trend-b{width:100%;border-radius:3px 3px 0 0;background:var(--accent);transition:.3s;min-height:2px}
+.trend-day-lbl{font-family:var(--mono);font-size:8px;color:var(--muted)}
+
+/* ── HEAT CELL ── */
+.heat{padding:2px 6px;border-radius:4px;font-family:var(--mono);font-size:10px}
+.heat-hi{background:#00e5a022;color:var(--green)}.heat-md{background:#ff6b3522;color:var(--warn)}.heat-lo{background:#ff3b5c22;color:var(--danger)}
+
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+@media(max-width:700px){
+  .main,.header,.filters,.view-tabs{padding-left:14px;padding-right:14px}
+  .charts{grid-template-columns:1fr}
+  .kpi-strip{grid-template-columns:repeat(2,1fr)}
+  .slots-grid{grid-template-columns:repeat(2,1fr)}
+  .slot:nth-child(5){grid-column:1/-1}
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ UPLOAD SCREEN ══════════════ -->
+<div id="uploadScreen">
+  <div class="up-hero">
+    <div class="up-logo">◈ SALESPULSE · INTELLIGENCE EDITION</div>
+    <div class="up-title">Sales Activity Dashboard</div>
+    <div class="up-sub">Daily call-time analysis · team vs rep · multi-day trend comparison</div>
+  </div>
+
+  <div class="slots-grid">
+    <div class="slot" id="slot0" onclick="triggerSlot(0)" ondragover="dragOver(event,0)" ondragleave="dragLeave(0)" ondrop="dropSlot(event,0)">
+      <div class="slot-day">Day 1</div>
+      <div class="slot-icon">📋</div>
+      <div class="slot-label">Drop or click<br>to upload</div>
+      <input type="file" id="fi0" accept=".xlsx,.xls,.csv" onchange="handleSlotFile(0,this.files[0])">
+    </div>
+    <div class="slot" id="slot1" onclick="triggerSlot(1)" ondragover="dragOver(event,1)" ondragleave="dragLeave(1)" ondrop="dropSlot(event,1)">
+      <div class="slot-day">Day 2</div>
+      <div class="slot-icon">📋</div>
+      <div class="slot-label">Drop or click<br>to upload</div>
+      <input type="file" id="fi1" accept=".xlsx,.xls,.csv" onchange="handleSlotFile(1,this.files[0])">
+    </div>
+    <div class="slot" id="slot2" onclick="triggerSlot(2)" ondragover="dragOver(event,2)" ondragleave="dragLeave(2)" ondrop="dropSlot(event,2)">
+      <div class="slot-day">Day 3</div>
+      <div class="slot-icon">📋</div>
+      <div class="slot-label">Drop or click<br>to upload</div>
+      <input type="file" id="fi2" accept=".xlsx,.xls,.csv" onchange="handleSlotFile(2,this.files[0])">
+    </div>
+    <div class="slot" id="slot3" onclick="triggerSlot(3)" ondragover="dragOver(event,3)" ondragleave="dragLeave(3)" ondrop="dropSlot(event,3)">
+      <div class="slot-day">Day 4</div>
+      <div class="slot-icon">📋</div>
+      <div class="slot-label">Drop or click<br>to upload</div>
+      <input type="file" id="fi3" accept=".xlsx,.xls,.csv" onchange="handleSlotFile(3,this.files[0])">
+    </div>
+    <div class="slot" id="slot4" onclick="triggerSlot(4)" ondragover="dragOver(event,4)" ondragleave="dragLeave(4)" ondrop="dropSlot(event,4)">
+      <div class="slot-day">Day 5</div>
+      <div class="slot-icon">📋</div>
+      <div class="slot-label">Drop or click<br>to upload</div>
+      <input type="file" id="fi4" accept=".xlsx,.xls,.csv" onchange="handleSlotFile(4,this.files[0])">
+    </div>
+  </div>
+
+  <div class="up-actions">
+    <button class="up-btn" id="goBtn" onclick="launchDash()" disabled>▶ Launch Dashboard</button>
+  </div>
+  <div class="up-hint">
+    Upload <b>1–5 daily Excel/CSV files</b> (Mon→Fri). Each file should contain a <b>Team summary block</b> (with Team, CC Count, Total Dials, Connected Calls, Call Time, Appointments, Appo Target) and optionally a <b>Rep detail block</b> (with Name, Team, Total Dials, etc.). The dashboard auto-detects both blocks and enables multi-day trend comparison when multiple files are loaded.
+  </div>
+</div>
+
+<!-- ══════════════ DASHBOARD ══════════════ -->
+<div id="dashWrap" style="display:none">
+
+<header class="header">
+  <span class="logo">◈ SALESPULSE</span>
+  <div id="dayBadges" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+  <button class="reload-btn" onclick="resetDash()">↑ Load New Files</button>
+</header>
+
+<div class="view-tabs">
+  <button class="vtab active" onclick="switchView('team')" id="tab-team">🏆 Team Summary</button>
+  <button class="vtab" onclick="switchView('reps')" id="tab-reps">👤 Rep Leaderboard</button>
+  <button class="vtab" onclick="switchView('insights')" id="tab-insights">💡 Auto Insights</button>
+  <button class="vtab" onclick="switchView('attendance')" id="tab-attendance">📋 Attendance</button>
+  <button class="vtab" onclick="switchView('trend')" id="tab-trend">📈 Multi-Day Trend</button>
+</div>
+
+<div class="filters" id="teamFilterRow">
+  <span class="filter-label">Team</span>
+  <div class="pills" id="teamPills"></div>
+</div>
+
+<div class="main">
+
+  <!-- TEAM SUMMARY -->
+  <div id="view-team">
+    <div class="kpi-strip" id="teamKpiStrip"></div>
+    <div class="mom-section">
+      <div class="section-title">📊 Team Performance Table</div>
+      <div class="section-sub">All teams for selected day · click column headers to sort</div>
+      <div class="tbl-wrap"><table class="dtable" id="teamTable"></table></div>
+    </div>
+    <div class="charts" id="teamChartsGrid"></div>
+  </div>
+
+  <!-- REP LEADERBOARD -->
+  <div id="view-reps" style="display:none">
+    <div class="kpi-strip" id="repKpiStrip"></div>
+    <div class="mom-section">
+      <div class="section-title">👤 Rep Detail Table</div>
+      <div class="section-sub">All reps for selected day & team filter · click headers to sort</div>
+      <div class="tbl-wrap"><table class="dtable" id="repTable"></table></div>
+    </div>
+    <div class="charts" id="repChartsGrid"></div>
+  </div>
+
+  <!-- AUTO INSIGHTS -->
+  <div id="view-insights" style="display:none">
+    <div class="narrative" id="narrativeBox"></div>
+    <div class="ins-hdr"><span class="ins-badge">Auto Analysis</span><span style="font-size:14px;font-weight:600">Ranked Findings — sorted by business impact</span></div>
+    <div class="ins-grid" id="insightGrid"></div>
+  </div>
+
+  <!-- ATTENDANCE -->
+  <div id="view-attendance" style="display:none">
+    <div class="kpi-strip" id="attKpiStrip"></div>
+    <div class="mom-section">
+      <div class="section-title">📋 Attendance Breakdown by Team</div>
+      <div class="section-sub">P = Present · WFH = Work From Home · L = Leave · HL = Half Leave · CO = Comp Off</div>
+      <div class="tbl-wrap"><table class="dtable" id="attTable"></table></div>
+    </div>
+    <div class="charts" id="attChartsGrid"></div>
+  </div>
+
+  <!-- MULTI-DAY TREND -->
+  <div id="view-trend" style="display:none">
+    <div id="trendNoData" style="display:none;color:var(--muted);font-size:13px;padding:20px 0">Upload at least 2 daily files to see trends.</div>
+    <div id="trendContent">
+      <div class="kpi-strip" id="trendKpiStrip"></div>
+      <div class="charts" id="trendChartsGrid"></div>
+      <div class="mom-section">
+        <div class="section-title">📅 Day-on-Day Comparison Table</div>
+        <div class="section-sub">Grand total metrics across all uploaded days</div>
+        <div class="tbl-wrap"><table class="dtable" id="trendTable"></table></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════
+const MAX_SLOTS = 5;
+const COLORS = ['#4f7cff','#00e5a0','#ff6b35','#a855f7','#ff3b5c','#fbbf24','#06b6d4','#84cc16'];
+const BASE_SCALE = {x:{ticks:{color:'#7a82a0',font:{size:9,family:'IBM Plex Mono'}},grid:{color:'#1e2330'}},y:{ticks:{color:'#7a82a0',font:{size:9,family:'IBM Plex Mono'}},grid:{color:'#1e2330'}}};
+const TOOLTIP = {backgroundColor:'#1e2330',borderColor:'#2a3047',borderWidth:1,titleColor:'#e8eaf2',bodyColor:'#7a82a0',padding:8};
+const LEGEND = {labels:{color:'#7a82a0',font:{family:'IBM Plex Mono',size:9},boxWidth:10}};
+
+// slots[i] = { name, date, teams:[], reps:[] } or null
+let slots = [null,null,null,null,null];
+let activeDay = 0; // index into slots[] (only loaded ones)
+let currentView = 'team';
+let selectedTeams = new Set(['All']);
+let charts = {};
+let sortCol = null, sortAsc = true;
+
+// ═══════════════════════════════════════════════════════
+//  UPLOAD / PARSE
+// ═══════════════════════════════════════════════════════
+function triggerSlot(i){ document.getElementById('fi'+i).click(); }
+function dragOver(e,i){ e.preventDefault(); document.getElementById('slot'+i).classList.add('drag'); }
+function dragLeave(i){ document.getElementById('slot'+i).classList.remove('drag'); }
+function dropSlot(e,i){ e.preventDefault(); dragLeave(i); const f=e.dataTransfer.files[0]; if(f) handleSlotFile(i,f); }
+
+function handleSlotFile(i, file){
+  if(!file) return;
+  const r = new FileReader();
+  r.onload = e => {
+    try{
+      const data = parseFile(e.target.result, file.name);
+      if(!data){ alert('Could not parse file — check column headers.'); return; }
+      slots[i] = data;
+      markSlotLoaded(i, file.name);
+      document.getElementById('goBtn').disabled = false;
+    }catch(err){ alert('Error: '+err.message); }
+  };
+  if(file.name.endsWith('.csv')){ r.readAsText(file); }
+  else { r.readAsArrayBuffer(file); }
+}
+
+function markSlotLoaded(i, name){
+  const slot = document.getElementById('slot'+i);
+  slot.classList.add('loaded');
+  slot.querySelector('.slot-icon').textContent = '✅';
+  slot.querySelector('.slot-label').textContent = name.length>20 ? name.slice(0,18)+'…' : name;
+  // add remove button if not present
+  if(!slot.querySelector('.slot-remove')){
+    const x = document.createElement('span');
+    x.className='slot-remove'; x.textContent='×';
+    x.onclick = e => { e.stopPropagation(); clearSlot(i); };
+    slot.appendChild(x);
+  }
+}
+
+function clearSlot(i){
+  slots[i]=null;
+  const slot=document.getElementById('slot'+i);
+  slot.classList.remove('loaded','drag');
+  slot.querySelector('.slot-icon').textContent='📋';
+  slot.querySelector('.slot-label').innerHTML='Drop or click<br>to upload';
+  const rem=slot.querySelector('.slot-remove'); if(rem) rem.remove();
+  document.getElementById('fi'+i).value='';
+  if(slots.every(s=>s===null)) document.getElementById('goBtn').disabled=true;
+}
+
+function excelDateToStr(v){
+  if(typeof v==='number'){ const d=new Date(Math.round((v-25569)*86400*1000)); return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}); }
+  if(typeof v==='string') return v.trim();
+  if(v instanceof Date) return v.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
+  return '?';
+}
+
+// Normalize whitespace: collapses NBSP (\xa0), tabs, and repeated spaces to a single
+// regular space. Some daily exports use NBSP inside header text (e.g. "Call\xa0Time\xa0%")
+// while others use plain spaces — without this normalization, column-name matching
+// silently fails on the NBSP files and those metrics default to 0.
+function normWS(s){ return String(s||'').replace(/[\s\u00a0]+/g,' ').trim(); }
+
+function parseFile(buffer, fileName){
+  let rows;
+  if(typeof buffer === 'string'){
+    // CSV
+    rows = buffer.split('\n').map(l=>l.split(',').map(c=>c.trim().replace(/^"|"$/g,'')));
+  } else {
+    const wb = XLSX.read(buffer,{type:'array'});
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    rows = XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+  }
+
+  // Find header rows
+  const teamHeaderIdx = rows.findIndex(r => r && r.some(c=>normWS(c).toLowerCase().includes('total dials')) && r.some(c=>normWS(c).toLowerCase().includes('team')));
+  if(teamHeaderIdx<0) throw new Error('Cannot find Team summary header row (needs "Team" and "Total Dials" columns).');
+
+  const teamHdr = rows[teamHeaderIdx].map(h=>normWS(h));
+  const tIdx = h => teamHdr.findIndex(x=>x.toLowerCase().includes(h.toLowerCase()));
+
+  const tTeam=tIdx('Team'), tCC=tIdx('CC'), tDials=tIdx('Total Dial'), tAvgDial=tIdx('Avg Dial'),
+        tConn=tIdx('Connected Call'), tAvgConn=tIdx('Avg Con'), tCallMin=tIdx('Call Time ( In Min'),
+        tCallPct=tIdx('Call Time %'), tTarget=tIdx('Appo Target'), tAppo=tIdx('Appointment'),
+        tRunrate=tIdx('Ach Run'), tAvgAppo=tIdx('Average Appo'), tHV=tIdx('Home Visit'), tDate=tIdx('Date');
+
+  let date = 'Unknown';
+  const teamRows = [];
+  for(let r=teamHeaderIdx+1; r<rows.length; r++){
+    const row = rows[r];
+    if(!row || row.every(v=>v===null||v===''||v===undefined)) break;
+    const teamVal = normWS(row[tTeam]);
+    if(!teamVal || teamVal.toLowerCase().includes('grand total')){ continue; }
+    // stop if we hit a second header block (Name col)
+    if(teamVal.toLowerCase()==='name') break;
+    if(tDate>=0 && row[tDate]) date = excelDateToStr(row[tDate]);
+    teamRows.push({
+      team:teamVal,
+      cc:+row[tCC]||0, dials:+row[tDials]||0, avgDial:+row[tAvgDial]||0,
+      connected:+row[tConn]||0, avgConn:+row[tAvgConn]||0,
+      callMin:+row[tCallMin]||0, callPct:+(row[tCallPct]||0)*100,
+      target:+row[tTarget]||0, appos:+row[tAppo]||0,
+      runrate:+(row[tRunrate]||0), avgAppo:+row[tAvgAppo]||0,
+      homeVisit:+row[tHV]||0
+    });
+  }
+
+  // Rep detail block
+  const repHeaderIdx = rows.findIndex((r,i)=> i>teamHeaderIdx && r && r.some(c=>normWS(c).toLowerCase()==='name') && r.some(c=>normWS(c).toLowerCase().includes('team')));
+  const repRows = [];
+  if(repHeaderIdx>=0){
+    const repHdr = rows[repHeaderIdx].map(h=>normWS(h));
+    const rIdx = h => repHdr.findIndex(x=>x.toLowerCase().includes(h.toLowerCase()));
+    const rName=rIdx('Name'), rTeam=rIdx('Team'), rDials=rIdx('Total Dial'), rConn=rIdx('Connected'),
+          rCallMin=rIdx('Call Time (In Min'), rCallPct=rIdx('Call Time %'), rAppo=rIdx('Appointment'),
+          rHV=rIdx('Home Visit'), rStatus=rIdx('Status');
+    for(let r=repHeaderIdx+1; r<rows.length; r++){
+      const row=rows[r];
+      if(!row||row.every(v=>v===null||v===''||v===undefined)) break;
+      const nm=normWS(row[rName]); if(!nm) break;
+      repRows.push({
+        name:nm, team:normWS(row[rTeam]),
+        dials:+row[rDials]||0, connected:+row[rConn]||0,
+        callMin:+row[rCallMin]||0, callPct:+(row[rCallPct]||0)*100,
+        appos:+row[rAppo]||0, homeVisit:+row[rHV]||0,
+        status:normWS(row[rStatus]||'P').toUpperCase()
+      });
+    }
+  }
+
+  // Try to get date from filename if not found in data
+  if(date==='Unknown'){
+    const m = fileName.match(/\d{1,2}[\s_-]?(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|\d{1,2})[\s_-]?\d{2,4}/i);
+    if(m) date = m[0];
+    else {
+      const m2 = fileName.match(/(\d{1,2})[_\-\s](\d{1,2})[_\-\s](\d{2,4})/);
+      if(m2) date = `${m2[1]}/${m2[2]}/${m2[3]}`;
+      else date = fileName.replace(/\.xlsx?|\.csv/i,'').slice(-12);
+    }
+  }
+
+  return { name:fileName, date, teams:teamRows, reps:repRows };
+}
+
+// ═══════════════════════════════════════════════════════
+//  LAUNCH
+// ═══════════════════════════════════════════════════════
+function launchDash(){
+  const loaded = slots.map((s,i)=>({s,i})).filter(x=>x.s!==null);
+  if(!loaded.length){ alert('Upload at least one file.'); return; }
+  activeDay = loaded[0].i;
+  document.getElementById('uploadScreen').style.display='none';
+  document.getElementById('dashWrap').style.display='block';
+  buildDayBadges();
+  initTeamFilter();
+  render();
+}
+
+function resetDash(){
+  slots=[null,null,null,null,null];
+  Object.values(charts).forEach(c=>c.destroy()); charts={};
+  document.getElementById('dashWrap').style.display='none';
+  document.getElementById('uploadScreen').style.display='flex';
+  for(let i=0;i<5;i++) clearSlot(i);
+}
+
+function buildDayBadges(){
+  const wrap=document.getElementById('dayBadges'); wrap.innerHTML='';
+  slots.forEach((s,i)=>{
+    if(!s) return;
+    const b=document.createElement('span');
+    b.className='day-badge '+(i===activeDay?'active-day':'inactive-day');
+    b.textContent='◉ '+s.date;
+    b.onclick=()=>{ activeDay=i; buildDayBadges(); initTeamFilter(); render(); };
+    wrap.appendChild(b);
+  });
+}
+
+function initTeamFilter(){
+  const d=slots[activeDay]; if(!d) return;
+  const teams=['All',...d.teams.map(t=>t.team)];
+  const pp=document.getElementById('teamPills'); pp.innerHTML='';
+  teams.forEach(t=>{
+    const b=document.createElement('button');
+    b.className='pill'+(t==='All'?' active':'');
+    b.textContent=t; b.onclick=()=>toggleTeam(t); pp.appendChild(b);
+  });
+  selectedTeams=new Set(['All']);
+}
+
+function toggleTeam(t){
+  const pills=document.querySelectorAll('#teamPills .pill');
+  if(t==='All'){ selectedTeams=new Set(['All']); pills.forEach(p=>p.classList.toggle('active',p.textContent==='All')); }
+  else{
+    selectedTeams.delete('All');
+    pills.forEach(p=>{ if(p.textContent==='All') p.classList.remove('active'); });
+    selectedTeams.has(t)?selectedTeams.delete(t):selectedTeams.add(t);
+    pills.forEach(p=>{ if(p.textContent===t) p.classList.toggle('active',selectedTeams.has(t)); });
+    if(selectedTeams.size===0){ selectedTeams.add('All'); pills.forEach(p=>{ if(p.textContent==='All') p.classList.add('active'); }); }
+  }
+  render();
+}
+
+function switchView(v){
+  currentView=v;
+  ['team','reps','insights','attendance','trend'].forEach(id=>{
+    document.getElementById('view-'+id).style.display=id===v?'block':'none';
+    document.getElementById('tab-'+id).classList.toggle('active',id===v);
+  });
+  render();
+}
+
+// ═══════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════
+function mkChart(id,type,labels,datasets,extraOpts={}){
+  if(charts[id]){ charts[id].destroy(); delete charts[id]; }
+  const canvas=document.getElementById(id); if(!canvas) return;
+  charts[id]=new Chart(canvas,{type,data:{labels,datasets},options:{responsive:true,maintainAspectRatio:false,animation:{duration:400},plugins:{legend:LEGEND,tooltip:TOOLTIP},scales:type==='doughnut'||type==='pie'?{}:BASE_SCALE,...extraOpts}});
+}
+function fmtN(v){ return v===null||v===undefined||isNaN(v)?'—':Math.round(v).toLocaleString(); }
+function fmtP(v){ return v===null||v===undefined||isNaN(v)?'—':v.toFixed(1)+'%'; }
+function fmtD(prev,curr){
+  if(prev===null||prev===undefined) return '<span class="neu">—</span>';
+  const d=curr-prev; const s=d>=0?'+':'';
+  return`<span class="${d>0?'up':d<0?'dn':'neu'}">${s}${fmtN(d)}</span>`;
+}
+function fmtDP(prev,curr){
+  if(prev===null||prev===undefined) return '<span class="neu">—</span>';
+  const d=curr-prev; const s=d>=0?'+':'';
+  return`<span class="${d>0.3?'up':d<-0.3?'dn':'neu'}">${s}${d.toFixed(1)}pp</span>`;
+}
+function connRate(row){ return row.dials?row.connected/row.dials*100:0; }
+function appoEff(row){ return row.connected?row.appos/row.connected*100:0; }
+function achPct(row){ return row.target?row.appos/row.target*100:0; }
+function totalFor(key){ return filteredTeams().reduce((s,t)=>s+(t[key]||0),0); }
+
+function filteredTeams(){
+  const d=slots[activeDay]; if(!d) return [];
+  return d.teams.filter(t=>selectedTeams.has('All')||selectedTeams.has(t.team));
+}
+function filteredReps(){
+  const d=slots[activeDay]; if(!d) return [];
+  return d.reps.filter(r=>selectedTeams.has('All')||selectedTeams.has(r.team));
+}
+
+function sortRows(rows, col, asc){
+  return [...rows].sort((a,b)=>{
+    let va=a[col], vb=b[col];
+    if(typeof va==='string'&&typeof vb==='string') return asc?va.localeCompare(vb):vb.localeCompare(va);
+    return asc?(va-vb):(vb-va);
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════════════════
+function render(){
+  if(currentView==='team') renderTeam();
+  if(currentView==='reps') renderReps();
+  if(currentView==='insights') renderInsights();
+  if(currentView==='attendance') renderAttendance();
+  if(currentView==='trend') renderTrend();
+}
+
+// ── TEAM SUMMARY ──
+function renderTeam(){
+  const teams=filteredTeams(); if(!teams.length) return;
+  const tot={
+    cc:totalFor('cc'), dials:totalFor('dials'), connected:totalFor('connected'),
+    callMin:totalFor('callMin'), target:totalFor('target'), appos:totalFor('appos'),
+    homeVisit:totalFor('homeVisit')
+  };
+  const totConnRate=tot.dials?tot.connected/tot.dials*100:0;
+  const totAch=tot.target?tot.appos/tot.target*100:0;
+
+  document.getElementById('teamKpiStrip').innerHTML=[
+    {lbl:'Total Dials',val:fmtN(tot.dials),sub:`${fmtN(tot.cc)} active CCs`,color:''},
+    {lbl:'Connected Calls',val:fmtN(tot.connected),sub:`Connection Rate ${fmtP(totConnRate)}`,color:totConnRate<30?'r':totConnRate<45?'w':'g'},
+    {lbl:'Appointments',val:fmtN(tot.appos),sub:`Target: ${fmtN(tot.target)}`,color:totAch>=100?'g':totAch>=60?'w':'r'},
+    {lbl:'Target Ach %',val:fmtP(totAch),sub:'Appos ÷ Appo Target',color:totAch>=100?'g':totAch>=60?'w':'r'},
+    {lbl:'Call Time',val:fmtN(tot.callMin)+' min',sub:`${(tot.callMin/60).toFixed(1)} hours total`,color:''},
+    {lbl:'Home Visits',val:fmtN(tot.homeVisit),sub:'Field conversion',color:tot.homeVisit>0?'p':''},
+  ].map(c=>`<div class="kpi ${c.color}"><div class="kpi-lbl">${c.lbl}</div><div class="kpi-val">${c.val}</div><div class="kpi-sub">${c.sub}</div></div>`).join('');
+
+  // Table
+  const sorted = sortCol ? sortRows(teams.map(t=>({...t,connRate:connRate(t),appoEff:appoEff(t),ach:achPct(t)})),sortCol,sortAsc) : teams.map(t=>({...t,connRate:connRate(t),appoEff:appoEff(t),ach:achPct(t)}));
+  const cols=[
+    {k:'team',l:'Team',num:false},{k:'cc',l:'CCs',num:true},{k:'dials',l:'Dials',num:true},
+    {k:'avgDial',l:'Avg Dial',num:true},{k:'connected',l:'Connected',num:true},
+    {k:'connRate',l:'Conn %',num:true},{k:'callMin',l:'Call Min',num:true},
+    {k:'target',l:'Target',num:true},{k:'appos',l:'Appos',num:true},
+    {k:'ach',l:'Ach %',num:true},{k:'runrate',l:'Run Rate',num:true},
+    {k:'avgAppo',l:'Avg Appo',num:true},{k:'homeVisit',l:'HV',num:true}
+  ];
+  const thead=`<thead><tr>${cols.map(c=>`<th class="${c.num?'num':''}" onclick="setSortTeam('${c.k}')" title="Sort by ${c.l}">${c.l}${sortCol===c.k?(sortAsc?'▲':'▼'):''}</th>`).join('')}</tr></thead>`;
+  const maxAch=Math.max(...sorted.map(t=>t.ach),1);
+  const tbody=sorted.map(t=>{
+    const achC=t.ach>=100?'heat-hi':t.ach>=60?'heat-md':'heat-lo';
+    const connC=t.connRate>=45?'heat-hi':t.connRate>=30?'heat-md':'heat-lo';
+    const w=(t.ach/maxAch*70).toFixed(0);
+    return`<tr>
+      <td class="lbl">${t.team}</td>
+      <td class="num">${t.cc}</td><td class="num">${fmtN(t.dials)}</td><td class="num">${t.avgDial}</td>
+      <td class="num">${fmtN(t.connected)}</td>
+      <td class="num"><span class="heat ${connC}">${fmtP(t.connRate)}</span></td>
+      <td class="num">${fmtN(t.callMin)}</td>
+      <td class="num">${t.target}</td><td class="num">${t.appos}</td>
+      <td class="num"><span class="heat ${achC}">${fmtP(t.ach)}<span class="bar-inline" style="width:${w}px;background:${t.ach>=100?'var(--green)':t.ach>=60?'var(--warn)':'var(--danger)'}"></span></span></td>
+      <td class="num">${t.runrate.toFixed(2)}</td><td class="num">${t.avgAppo}</td><td class="num">${t.homeVisit}</td>
+    </tr>`;
+  }).join('');
+  const totRow=`<tr class="total-row">
+    <td class="lbl">TOTAL</td>
+    <td class="num">${tot.cc}</td><td class="num">${fmtN(tot.dials)}</td><td class="num">—</td>
+    <td class="num">${fmtN(tot.connected)}</td>
+    <td class="num"><span class="heat ${totConnRate>=45?'heat-hi':totConnRate>=30?'heat-md':'heat-lo'}">${fmtP(totConnRate)}</span></td>
+    <td class="num">${fmtN(tot.callMin)}</td>
+    <td class="num">${tot.target}</td><td class="num">${tot.appos}</td>
+    <td class="num"><span class="heat ${totAch>=100?'heat-hi':totAch>=60?'heat-md':'heat-lo'}">${fmtP(totAch)}</span></td>
+    <td class="num">—</td><td class="num">—</td><td class="num">${tot.homeVisit}</td>
+  </tr>`;
+  document.getElementById('teamTable').innerHTML=thead+`<tbody>${tbody}${totRow}</tbody>`;
+
+  // Charts
+  const grid=document.getElementById('teamChartsGrid');
+  grid.innerHTML=[
+    {id:'c_appo_bar',title:'Appointments vs Target by Team',sub:'Green = met target'},
+    {id:'c_conn_rate',title:'Connection Rate % by Team',sub:'Connected Calls ÷ Total Dials'},
+    {id:'c_dials_bar',title:'Total Dials by Team',sub:'Volume of outreach'},
+    {id:'c_ach_bar',title:'Target Achievement % by Team',sub:'Appointments ÷ Appo Target'},
+    {id:'c_callmin_bar',title:'Total Call Time (mins) by Team',sub:''},
+    {id:'c_hv_bar',title:'Home Visits by Team',sub:'Field conversion activity'},
+  ].map(c=>`<div class="chart-card"><div class="ct">${c.title}</div><div class="cs">${c.sub||' '}</div><div class="cw"><canvas id="${c.id}"></canvas></div></div>`).join('');
+
+  const lbls=sorted.map(t=>t.team);
+  mkChart('c_appo_bar','bar',lbls,[
+    {label:'Appointments',data:sorted.map(t=>t.appos),backgroundColor:'#4f7cff88',borderColor:'#4f7cff',borderWidth:1.5},
+    {label:'Target',data:sorted.map(t=>t.target),backgroundColor:'#fbbf2444',borderColor:'#fbbf24',borderWidth:1.5,type:'line',tension:.3}
+  ]);
+  mkChart('c_conn_rate','bar',lbls,[{label:'Connection %',data:sorted.map(t=>t.connRate),backgroundColor:sorted.map(t=>t.connRate>=45?'#00e5a088':t.connRate>=30?'#ff6b3588':'#ff3b5c88'),borderColor:sorted.map(t=>t.connRate>=45?'#00e5a0':t.connRate>=30?'#ff6b35':'#ff3b5c'),borderWidth:1.5}]);
+  mkChart('c_dials_bar','bar',lbls,[{label:'Dials',data:sorted.map(t=>t.dials),backgroundColor:'#a855f788',borderColor:'#a855f7',borderWidth:1.5}]);
+  mkChart('c_ach_bar','bar',lbls,[{label:'Achievement %',data:sorted.map(t=>t.ach),backgroundColor:sorted.map(t=>t.ach>=100?'#00e5a088':t.ach>=60?'#ff6b3588':'#ff3b5c88'),borderColor:sorted.map(t=>t.ach>=100?'#00e5a0':t.ach>=60?'#ff6b35':'#ff3b5c'),borderWidth:1.5}],{scales:{...BASE_SCALE,y:{...BASE_SCALE.y,ticks:{...BASE_SCALE.y.ticks,callback:v=>v+'%'}}}});
+  mkChart('c_callmin_bar','bar',lbls,[{label:'Call Mins',data:sorted.map(t=>t.callMin),backgroundColor:'#06b6d488',borderColor:'#06b6d4',borderWidth:1.5}]);
+  mkChart('c_hv_bar','bar',lbls,[{label:'Home Visits',data:sorted.map(t=>t.homeVisit),backgroundColor:'#fbbf2488',borderColor:'#fbbf24',borderWidth:1.5}]);
+}
+
+let sortColTeam=null, sortAscTeam=true;
+function setSortTeam(col){ sortColTeam===col?sortAscTeam=!sortAscTeam:(sortColTeam=col,sortAscTeam=false); sortCol=sortColTeam; sortAsc=sortAscTeam; renderTeam(); }
+
+// ── REP LEADERBOARD ──
+let sortColRep=null, sortAscRep=false;
+function renderReps(){
+  const reps=filteredReps(); if(!reps.length){ document.getElementById('repKpiStrip').innerHTML='<div style="color:var(--muted);font-size:12px">No rep detail data in this file.</div>'; return; }
+  const tot={dials:0,connected:0,callMin:0,appos:0,homeVisit:0,count:reps.length};
+  reps.forEach(r=>{tot.dials+=r.dials;tot.connected+=r.connected;tot.callMin+=r.callMin;tot.appos+=r.appos;tot.homeVisit+=r.homeVisit;});
+  const totConn=tot.dials?tot.connected/tot.dials*100:0;
+
+  document.getElementById('repKpiStrip').innerHTML=[
+    {lbl:'Reps Included',val:fmtN(tot.count),sub:'In filter',color:''},
+    {lbl:'Total Dials',val:fmtN(tot.dials),sub:`Avg ${fmtN(tot.dials/tot.count)} per rep`,color:''},
+    {lbl:'Avg Connection %',val:fmtP(totConn),sub:`${fmtN(tot.connected)} total`,color:totConn>=45?'g':totConn>=30?'w':'r'},
+    {lbl:'Total Appos',val:fmtN(tot.appos),sub:`Avg ${(tot.appos/tot.count).toFixed(1)}/rep`,color:tot.appos>0?'g':'r'},
+    {lbl:'Home Visits',val:fmtN(tot.homeVisit),sub:`Avg ${(tot.homeVisit/tot.count).toFixed(1)}/rep`,color:'p'},
+  ].map(c=>`<div class="kpi ${c.color}"><div class="kpi-lbl">${c.lbl}</div><div class="kpi-val">${c.val}</div><div class="kpi-sub">${c.sub}</div></div>`).join('');
+
+  const enriched=reps.map(r=>({...r,connRate:r.dials?r.connected/r.dials*100:0,appoEff:r.connected?r.appos/r.connected*100:0}));
+  const sorted=sortColRep?sortRows(enriched,sortColRep,sortAscRep):enriched;
+
+  const cols=[
+    {k:'name',l:'Rep',num:false},{k:'team',l:'Team',num:false},{k:'dials',l:'Dials',num:true},
+    {k:'connected',l:'Connected',num:true},{k:'connRate',l:'Conn %',num:true},
+    {k:'callMin',l:'Call Min',num:true},{k:'appos',l:'Appos',num:true},
+    {k:'appoEff',l:'Appo/Conn%',num:true},{k:'homeVisit',l:'HV',num:true},{k:'status',l:'Status',num:false}
+  ];
+  const thead=`<thead><tr>${cols.map(c=>`<th class="${c.num?'num':''}" onclick="setSortRep('${c.k}')">${c.l}${sortColRep===c.k?(sortAscRep?'▲':'▼'):''}</th>`).join('')}</tr></thead>`;
+  const statusColor={'P':'status-p','WFH':'status-wfh','L':'status-l','HL':'status-hl','CO':'status-co','H':'status-h'};
+  const tbody=sorted.map(r=>{
+    const connC=r.connRate>=45?'heat-hi':r.connRate>=30?'heat-md':'heat-lo';
+    const appoC=r.appos>=4?'heat-hi':r.appos>=2?'heat-md':'heat-lo';
+    const sc=statusColor[r.status]||'';
+    return`<tr>
+      <td class="lbl">${r.name}</td>
+      <td>${r.team}</td>
+      <td class="num">${r.dials}</td>
+      <td class="num">${r.connected}</td>
+      <td class="num"><span class="heat ${connC}">${fmtP(r.connRate)}</span></td>
+      <td class="num">${r.callMin}</td>
+      <td class="num"><span class="heat ${appoC}">${r.appos}</span></td>
+      <td class="num">${fmtP(r.appoEff)}</td>
+      <td class="num">${r.homeVisit}</td>
+      <td><span class="${sc}" style="font-family:var(--mono);font-size:10px;font-weight:600">${r.status}</span></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('repTable').innerHTML=thead+`<tbody>${tbody}</tbody>`;
+
+  // Charts
+  const grid=document.getElementById('repChartsGrid');
+  const top10appo=[...enriched].sort((a,b)=>b.appos-a.appos).slice(0,12);
+  const top10dials=[...enriched].sort((a,b)=>b.dials-a.dials).slice(0,12);
+  grid.innerHTML=[
+    {id:'r_appo_top',title:'Top Reps — Appointments',sub:'Highest appointment makers today',wide:true},
+    {id:'r_dials_top',title:'Top Reps — Total Dials',sub:'Highest dial volume today',wide:true},
+    {id:'r_conn_scatter',title:'Connection Rate by Rep',sub:'Higher = better lead quality or smarter dialing',wide:false},
+    {id:'r_appoeff',title:'Appo Conversion Rate (Appos / Connected)',sub:'Quality of connected conversations',wide:false},
+  ].map(c=>`<div class="chart-card${c.wide?' wide':''}"><div class="ct">${c.title}</div><div class="cs">${c.sub}</div><div class="cw${c.wide?' tall':''}"><canvas id="${c.id}"></canvas></div></div>`).join('');
+
+  mkChart('r_appo_top','bar',top10appo.map(r=>r.name),[{label:'Appos',data:top10appo.map(r=>r.appos),backgroundColor:top10appo.map(r=>r.appos>=4?'#00e5a088':r.appos>=2?'#ff6b3588':'#ff3b5c88'),borderColor:top10appo.map(r=>r.appos>=4?'#00e5a0':r.appos>=2?'#ff6b35':'#ff3b5c'),borderWidth:1.5}],{indexAxis:'y',plugins:{legend:{display:false},tooltip:TOOLTIP}});
+  mkChart('r_dials_top','bar',top10dials.map(r=>r.name),[{label:'Dials',data:top10dials.map(r=>r.dials),backgroundColor:'#4f7cff88',borderColor:'#4f7cff',borderWidth:1.5}],{indexAxis:'y',plugins:{legend:{display:false},tooltip:TOOLTIP}});
+
+  const connSorted=[...enriched].filter(r=>r.dials>20).sort((a,b)=>b.connRate-a.connRate).slice(0,15);
+  mkChart('r_conn_scatter','bar',connSorted.map(r=>r.name.split(' ')[0]),[{label:'Conn%',data:connSorted.map(r=>r.connRate),backgroundColor:connSorted.map(r=>r.connRate>=45?'#00e5a088':'#4f7cff88'),borderColor:connSorted.map(r=>r.connRate>=45?'#00e5a0':'#4f7cff'),borderWidth:1.5}],{plugins:{legend:{display:false},tooltip:TOOLTIP}});
+  const effSorted=[...enriched].filter(r=>r.connected>5).sort((a,b)=>b.appoEff-a.appoEff).slice(0,15);
+  mkChart('r_appoeff','bar',effSorted.map(r=>r.name.split(' ')[0]),[{label:'Appo Eff%',data:effSorted.map(r=>r.appoEff),backgroundColor:'#a855f788',borderColor:'#a855f7',borderWidth:1.5}],{plugins:{legend:{display:false},tooltip:TOOLTIP}});
+}
+function setSortRep(col){ sortColRep===col?sortAscRep=!sortAscRep:(sortColRep=col,sortAscRep=false); renderReps(); }
+
+// ── AUTO INSIGHTS ──
+function renderInsights(){
+  const teams=filteredTeams(); const reps=filteredReps();
+  if(!teams.length){ document.getElementById('narrativeBox').innerHTML='<h3>No data</h3>'; document.getElementById('insightGrid').innerHTML=''; return; }
+
+  const ins=[];
+  const push=(impact,type,tag,text,action)=>ins.push({impact,type,tag,text,action});
+  const tot={dials:totalFor('dials'),connected:totalFor('connected'),appos:totalFor('appos'),target:totalFor('target'),cc:totalFor('cc'),callMin:totalFor('callMin'),homeVisit:totalFor('homeVisit')};
+  const totConn=tot.dials?tot.connected/tot.dials*100:0;
+  const totAch=tot.target?tot.appos/tot.target*100:0;
+
+  // ── 1. Overall Achievement ──
+  push(totAch<60?'hi':totAch<85?'md':'lo',
+    totAch>=100?'pos':totAch<60?'dng':'warn','Overall Target Achievement',
+    `Grand total: <b>${fmtN(tot.appos)}</b> appointments against <b>${fmtN(tot.target)}</b> target → <b>${fmtP(totAch)} achievement</b> across ${fmtN(tot.cc)} active CCs. Total dials: ${fmtN(tot.dials)}, connected: ${fmtN(tot.connected)} (${fmtP(totConn)} connection rate).`,
+    totAch>=100?'→ Target met! Analyse which teams and reps drove the surplus — replicate their playbook.'
+      :totAch<60?`→ Critical gap: ${fmtN(tot.target-tot.appos)} appointments short. Review team-level breakdown immediately.`
+      :`→ On track but ${fmtN(tot.target-tot.appos)} appointments short. Identify which teams can still close the gap today.`
+  );
+
+  // ── 2. Best and worst team achievement ──
+  const teamEnriched=teams.map(t=>({...t,ach:achPct(t),connR:connRate(t)})).filter(t=>t.target>0);
+  if(teamEnriched.length>=2){
+    const best=teamEnriched.reduce((a,b)=>a.ach>b.ach?a:b);
+    const worst=teamEnriched.reduce((a,b)=>a.ach<b.ach?a:b);
+    push(best.ach-worst.ach>40?'hi':best.ach-worst.ach>20?'md':'lo',
+      worst.ach<50?'dng':'warn','Team Achievement Spread',
+      `Best performing team: <b>${best.team}</b> at <b>${fmtP(best.ach)}</b> (${best.appos}/${best.target} appos). Weakest: <b>${worst.team}</b> at <b>${fmtP(worst.ach)}</b> (${worst.appos}/${worst.target} appos). Spread: <b>${(best.ach-worst.ach).toFixed(0)}pp</b>.`,
+      `→ ${worst.team} needs immediate diagnosis — is it a dialling problem, a connection problem, or a conversion problem?`
+    );
+  }
+
+  // ── 3. Connection Rate outliers ──
+  const connSorted=[...teamEnriched].sort((a,b)=>b.connR-a.connR);
+  if(connSorted.length>=2){
+    const hiConn=connSorted[0], loConn=connSorted[connSorted.length-1];
+    push(hiConn.connR-loConn.connR>20?'hi':'md',
+      loConn.connR<25?'dng':'info','Connection Rate Gap',
+      `Highest connection rate: <b>${hiConn.team} at ${fmtP(hiConn.connR)}</b> (${fmtN(hiConn.connected)} of ${fmtN(hiConn.dials)} dials). Lowest: <b>${loConn.team} at ${fmtP(loConn.connR)}</b> (${fmtN(loConn.connected)} of ${fmtN(loConn.dials)} dials). Gap: ${(hiConn.connR-loConn.connR).toFixed(1)}pp.`,
+      loConn.connR<25?`→ ${loConn.team} has very low connection rate — check if they're dialling bad numbers, wrong time slots, or have list quality issues.`
+        :`→ Share ${hiConn.team}'s dialling timing and list strategy with lower-performing teams.`
+    );
+  }
+
+  // ── 4. Dial Efficiency (dials per CC) ──
+  const dialEff=teams.map(t=>({...t,dpp:t.cc?t.dials/t.cc:0})).sort((a,b)=>b.dpp-a.dpp);
+  if(dialEff.length>=2){
+    const hi=dialEff[0], lo=dialEff[dialEff.length-1];
+    push(hi.dpp-lo.dpp>60?'md':'lo','info','Dial Volume Efficiency (Dials per CC)',
+      `Highest dials/CC: <b>${hi.team} — ${fmtN(hi.dpp)} avg</b> (${fmtN(hi.dials)} across ${hi.cc} reps). Lowest: <b>${lo.team} — ${fmtN(lo.dpp)} avg</b> (${fmtN(lo.dials)} across ${lo.cc} reps). Gap: ${fmtN(hi.dpp-lo.dpp)} dials.`,
+      `→ ${lo.team} may have low-activity reps or attendance issues pulling the average down. Cross-check with attendance view.`
+    );
+  }
+
+  // ── 5. Call Time Efficiency ──
+  const callEff=teams.map(t=>({...t,minPerAppo:t.appos>0?t.callMin/t.appos:t.callMin})).sort((a,b)=>a.minPerAppo-b.minPerAppo);
+  if(callEff.length>=2){
+    const eff=callEff[0], ineff=callEff[callEff.length-1];
+    push('md','info','Call Time per Appointment',
+      `Most time-efficient: <b>${eff.team} — ${fmtN(eff.minPerAppo)} min/appo</b>. Least efficient: <b>${ineff.team} — ${ineff.appos>0?fmtN(ineff.minPerAppo)+'min/appo':'no appos despite '+fmtN(ineff.callMin)+' call mins'}</b>.`,
+      ineff.appos===0?`→ ${ineff.team} spent ${fmtN(ineff.callMin)} minutes on calls but set zero appointments. Review call quality and conversion scripts urgently.`
+        :`→ ${eff.team}'s shorter call-per-appo time suggests efficient qualification. Study their scripts.`
+    );
+  }
+
+  // ── 6. Zero-appointment teams ──
+  const zeroAppo=teams.filter(t=>t.appos===0&&t.target>0);
+  if(zeroAppo.length){
+    push('hi','dng','Zero Appointments — Action Required',
+      `<b>${zeroAppo.length} team(s) have zero appointments</b> despite having targets: ${zeroAppo.map(t=>`<b>${t.team}</b> (target: ${t.target})`).join(', ')}.`,
+      `→ Escalate immediately. Check attendance, CRM access, and whether these teams are dialling. This is today's biggest risk.`
+    );
+  }
+
+  // ── 7. Rep-level: zero appo high-diallers ──
+  if(reps.length){
+    const highDialNoAppo=reps.filter(r=>r.dials>=80&&r.appos===0&&['P','WFH'].includes(r.status));
+    if(highDialNoAppo.length){
+      push(highDialNoAppo.length>=3?'hi':'md','dng','High-Dial Reps with Zero Appointments',
+        `<b>${highDialNoAppo.length} rep(s)</b> dialled 80+ times today but booked zero appointments: ${highDialNoAppo.slice(0,5).map(r=>`<b>${r.name}</b> (${r.dials} dials, ${fmtP(connRate(r))} conn)`).join(', ')}${highDialNoAppo.length>5?'…':''}`,
+        `→ High dials + zero appos = conversion problem, not effort problem. Review their call recordings or scripts. They're burning through leads without converting.`
+      );
+    }
+  }
+
+  // ── 8. Home Visit rate ──
+  const hvTeams=teams.filter(t=>t.appos>0).map(t=>({...t,hvRate:t.appos?t.homeVisit/t.appos*100:0})).sort((a,b)=>b.hvRate-a.hvRate);
+  if(hvTeams.length>=2){
+    const hiHV=hvTeams[0];
+    push('lo','info','Home Visit Conversion',
+      `Top home-visit team: <b>${hiHV.team}</b> — ${fmtN(hiHV.homeVisit)} HVs from ${fmtN(hiHV.appos)} appos (${fmtP(hiHV.hvRate)} HV rate). Total HVs today: <b>${fmtN(tot.homeVisit)}</b>.`,
+      `→ Home visits typically have higher close rates. Track HV → sale pipeline separately to measure true field ROI.`
+    );
+  }
+
+  // ── 9. Winback vs Direct efficiency ──
+  const winbacks=teams.filter(t=>t.team.toLowerCase().includes('winback'));
+  const direct=teams.filter(t=>!t.team.toLowerCase().includes('winback')&&!t.team.toLowerCase().includes('revival'));
+  if(winbacks.length&&direct.length){
+    const wbConn=winbacks.reduce((s,t)=>s+t.connected,0)/Math.max(winbacks.reduce((s,t)=>s+t.dials,0),1)*100;
+    const drConn=direct.reduce((s,t)=>s+t.connected,0)/Math.max(direct.reduce((s,t)=>s+t.dials,0),1)*100;
+    const wbAch=winbacks.reduce((s,t)=>s+t.appos,0)/Math.max(winbacks.reduce((s,t)=>s+t.target,0),1)*100;
+    const drAch=direct.reduce((s,t)=>s+t.appos,0)/Math.max(direct.reduce((s,t)=>s+t.target,0),1)*100;
+    push('md','info','Winback vs Direct Teams',
+      `Winback teams avg connection rate: <b>${fmtP(wbConn)}</b> (vs direct teams: ${fmtP(drConn)}). Achievement: Winback <b>${fmtP(wbAch)}</b> vs Direct <b>${fmtP(drAch)}</b>. Winback naturally has higher connection rates due to existing customer numbers.`,
+      `→ Don't benchmark Winback connection rates against Direct teams — the list quality is fundamentally different. Use appo-per-CC as the fair comparison metric.`
+    );
+  }
+
+  // ── sort and render ──
+  const order={hi:0,md:1,lo:2};
+  ins.sort((a,b)=>order[a.impact]-order[b.impact]);
+  ins.forEach((x,i)=>x.n=i+1);
+
+  // Narrative
+  const d=slots[activeDay];
+  let narr=`<p>On <b>${d.date}</b>, the sales floor ran <b>${fmtN(tot.dials)}</b> dials across <b>${fmtN(tot.cc)}</b> active CCs, connecting on <b>${fmtN(tot.connected)}</b> calls (${fmtP(totConn)} connection rate). `;
+  narr+=`The team booked <b>${fmtN(tot.appos)}</b> appointments against a target of <b>${fmtN(tot.target)}</b> — <b class="${totAch>=100?'':'neg'}">${fmtP(totAch)} achievement</b>.</p>`;
+  if(teamEnriched.length>=2){
+    const best=teamEnriched.reduce((a,b)=>a.ach>b.ach?a:b);
+    const worst=teamEnriched.reduce((a,b)=>a.ach<b.ach?a:b);
+    narr+=`<p><b>${best.team}</b> led achievement at ${fmtP(best.ach)}, while <b class="neg">${worst.team}</b> trailed at ${fmtP(worst.ach)}. `;
+    narr+=`${fmtN(tot.homeVisit)} home visits were logged — a direct pipeline for in-person conversions.</p>`;
+  }
+  document.getElementById('narrativeBox').innerHTML=`<h3>📖 Daily Executive Narrative</h3>${narr}`;
+  document.getElementById('insightGrid').innerHTML=ins.map(i=>
+    `<div class="ins-card ${i.type}"><div class="ins-tag"><span class="ins-num">${String(i.n).padStart(2,'0')}</span>${i.tag}<span class="impact-dot imp-${i.impact}"></span></div><div class="ins-txt">${i.text}</div><div class="ins-act">${i.action}</div></div>`
+  ).join('');
+}
+
+// ── ATTENDANCE ──
+function renderAttendance(){
+  const reps=filteredReps();
+  if(!reps.length){ document.getElementById('attKpiStrip').innerHTML='<div style="color:var(--muted);font-size:12px">No rep detail data in this file.</div>'; document.getElementById('attTable').innerHTML=''; return; }
+
+  const statusMap={'P':'Present','WFH':'Work From Home','L':'Leave','HL':'Half Leave','CO':'Comp Off','H':'Other'};
+  const counts={P:0,WFH:0,L:0,HL:0,CO:0,H:0};
+  reps.forEach(r=>{ const s=r.status; if(counts[s]!==undefined) counts[s]++; else counts.H++; });
+  const total=reps.length;
+  const active=counts.P+counts.WFH;
+
+  document.getElementById('attKpiStrip').innerHTML=[
+    {lbl:'Total Reps',val:fmtN(total),sub:'In filter',color:''},
+    {lbl:'Active Today',val:fmtN(active),sub:`P + WFH (${fmtP(active/total*100)})`,color:active/total>=0.8?'g':active/total>=0.6?'w':'r'},
+    {lbl:'On Leave',val:fmtN(counts.L),sub:'Full leave',color:counts.L>0?'r':'g'},
+    {lbl:'WFH',val:fmtN(counts.WFH),sub:'Remote today',color:'p'},
+    {lbl:'Half Leave / CO',val:fmtN(counts.HL+counts.CO),sub:'Partial availability',color:'w'},
+  ].map(c=>`<div class="kpi ${c.color}"><div class="kpi-lbl">${c.lbl}</div><div class="kpi-val">${c.val}</div><div class="kpi-sub">${c.sub}</div></div>`).join('');
+
+  // Group by team
+  const teamMap=new Map();
+  reps.forEach(r=>{
+    if(!teamMap.has(r.team)) teamMap.set(r.team,{team:r.team,P:0,WFH:0,L:0,HL:0,CO:0,H:0,total:0});
+    const t=teamMap.get(r.team); t.total++;
+    const s=r.status; if(t[s]!==undefined) t[s]++; else t.H++;
+  });
+  const teamRows=[...teamMap.values()].sort((a,b)=>b.total-a.total);
+
+  const thead=`<thead><tr><th>Team</th><th class="num">Total</th><th class="num">Present</th><th class="num">WFH</th><th class="num">Leave</th><th class="num">Half Leave</th><th class="num">Comp Off</th><th class="num">Active %</th></tr></thead>`;
+  const tbody=teamRows.map(t=>{
+    const actPct=(t.P+t.WFH)/t.total*100;
+    const c=actPct>=80?'heat-hi':actPct>=60?'heat-md':'heat-lo';
+    return`<tr>
+      <td class="lbl">${t.team}</td><td class="num">${t.total}</td>
+      <td class="num"><span class="status-p" style="font-weight:600">${t.P}</span></td>
+      <td class="num"><span class="status-wfh">${t.WFH}</span></td>
+      <td class="num"><span class="status-l">${t.L}</span></td>
+      <td class="num"><span class="status-hl">${t.HL}</span></td>
+      <td class="num"><span class="status-co">${t.CO}</span></td>
+      <td class="num"><span class="heat ${c}">${fmtP(actPct)}</span></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('attTable').innerHTML=thead+`<tbody>${tbody}</tbody>`;
+
+  const grid=document.getElementById('attChartsGrid');
+  grid.innerHTML=[
+    {id:'a_status_pie',title:'Attendance Distribution',sub:'All reps — today'},
+    {id:'a_active_team',title:'Active % by Team',sub:'Present + WFH'},
+  ].map(c=>`<div class="chart-card"><div class="ct">${c.title}</div><div class="cs">${c.sub}</div><div class="cw"><canvas id="${c.id}"></canvas></div></div>`).join('');
+
+  const statLabels=Object.keys(counts).filter(k=>counts[k]>0);
+  const statColors={'P':'#00e5a0','WFH':'#06b6d4','L':'#ff3b5c','HL':'#ff6b35','CO':'#a855f7','H':'#fbbf24'};
+  mkChart('a_status_pie','doughnut',statLabels.map(k=>statusMap[k]||k),[{data:statLabels.map(k=>counts[k]),backgroundColor:statLabels.map(k=>(statColors[k]||'#7a82a0')+'aa'),borderColor:statLabels.map(k=>statColors[k]||'#7a82a0'),borderWidth:1.5}],{plugins:{legend:{position:'bottom',labels:{color:'#7a82a0',font:{family:'IBM Plex Mono',size:9},boxWidth:8}},tooltip:TOOLTIP}});
+  mkChart('a_active_team','bar',teamRows.map(t=>t.team),[{label:'Active %',data:teamRows.map(t=>(t.P+t.WFH)/t.total*100),backgroundColor:teamRows.map(t=>{const p=(t.P+t.WFH)/t.total*100;return p>=80?'#00e5a088':p>=60?'#ff6b3588':'#ff3b5c88';}),borderColor:teamRows.map(t=>{const p=(t.P+t.WFH)/t.total*100;return p>=80?'#00e5a0':p>=60?'#ff6b35':'#ff3b5c';}),borderWidth:1.5}],{plugins:{legend:{display:false},tooltip:TOOLTIP}});
+}
+
+// ── MULTI-DAY TREND ──
+function renderTrend(){
+  const loaded=slots.filter(s=>s!==null);
+  if(loaded.length<2){
+    document.getElementById('trendNoData').style.display='block';
+    document.getElementById('trendContent').style.display='none';
+    return;
+  }
+  document.getElementById('trendNoData').style.display='none';
+  document.getElementById('trendContent').style.display='block';
+
+  // Per-day grand totals
+  const dayStats=loaded.map(d=>{
+    const teams=selectedTeams.has('All')?d.teams:d.teams.filter(t=>selectedTeams.has(t.team));
+    const tot={date:d.date,dials:0,connected:0,appos:0,target:0,callMin:0,homeVisit:0,cc:0};
+    teams.forEach(t=>{tot.dials+=t.dials;tot.connected+=t.connected;tot.appos+=t.appos;tot.target+=t.target;tot.callMin+=t.callMin;tot.homeVisit+=t.homeVisit;tot.cc+=t.cc;});
+    tot.connRate=tot.dials?tot.connected/tot.dials*100:0;
+    tot.ach=tot.target?tot.appos/tot.target*100:0;
+    return tot;
+  });
+
+  // Latest vs previous day
+  const lat=dayStats[dayStats.length-1], prev=dayStats.length>=2?dayStats[dayStats.length-2]:null;
+  document.getElementById('trendKpiStrip').innerHTML=[
+    {lbl:'Latest Day',val:lat.date,sub:'Active view',color:''},
+    {lbl:'Dials Trend',val:fmtN(lat.dials),sub:prev?`vs ${fmtN(prev.dials)} prev day`:'-',chg:prev?lat.dials-prev.dials:null,color:''},
+    {lbl:'Appos Trend',val:fmtN(lat.appos),sub:prev?`vs ${fmtN(prev.appos)} prev day`:'-',chg:prev?lat.appos-prev.appos:null,color:lat.ach>=100?'g':lat.ach>=60?'w':'r'},
+    {lbl:'Conn Rate Trend',val:fmtP(lat.connRate),sub:prev?`vs ${fmtP(prev.connRate)} prev`:'-',chg:prev?lat.connRate-prev.connRate:null,color:lat.connRate>=45?'g':lat.connRate>=30?'w':'r'},
+    {lbl:'Achievement Trend',val:fmtP(lat.ach),sub:prev?`vs ${fmtP(prev.ach)} prev`:'-',color:lat.ach>=100?'g':lat.ach>=60?'w':'r'},
+  ].map(c=>{
+    let chgHtml='';
+    if(c.chg!==null&&c.chg!==undefined){
+      const s=c.chg>=0?'▲':'▼'; const cc=c.chg>0?'up':c.chg<0?'dn':'neu';
+      chgHtml=`<div class="kpi-chg ${cc}">${s} ${c.chg>=0?'+':''}${typeof c.chg==='number'&&c.chg%1!==0?c.chg.toFixed(1):fmtN(c.chg)}</div>`;
+    }
+    return`<div class="kpi ${c.color}"><div class="kpi-lbl">${c.lbl}</div><div class="kpi-val">${c.val}</div><div class="kpi-sub">${c.sub}</div>${chgHtml}</div>`;
+  }).join('');
+
+  // Trend charts
+  const grid=document.getElementById('trendChartsGrid');
+  grid.innerHTML=[
+    {id:'tr_dials',title:'Dials — Day over Day',sub:'Total dials across all teams'},
+    {id:'tr_appos',title:'Appointments — Day over Day',sub:'vs target line'},
+    {id:'tr_connrate',title:'Connection Rate % — Day over Day',sub:''},
+    {id:'tr_ach',title:'Achievement % — Day over Day',sub:''},
+    {id:'tr_hv',title:'Home Visits — Day over Day',sub:''},
+    {id:'tr_callmin',title:'Call Time (Mins) — Day over Day',sub:''},
+  ].map(c=>`<div class="chart-card"><div class="ct">${c.title}</div><div class="cs">${c.sub||' '}</div><div class="cw"><canvas id="${c.id}"></canvas></div></div>`).join('');
+
+  const dlbls=dayStats.map(d=>d.date);
+  mkChart('tr_dials','line',dlbls,[{label:'Dials',data:dayStats.map(d=>d.dials),borderColor:'#4f7cff',backgroundColor:'#4f7cff22',fill:true,tension:.3,pointRadius:5}]);
+  mkChart('tr_appos','line',dlbls,[
+    {label:'Appos',data:dayStats.map(d=>d.appos),borderColor:'#00e5a0',backgroundColor:'#00e5a022',fill:true,tension:.3,pointRadius:5},
+    {label:'Target',data:dayStats.map(d=>d.target),borderColor:'#fbbf2488',borderDash:[5,5],fill:false,tension:.3,pointRadius:3}
+  ]);
+  mkChart('tr_connrate','line',dlbls,[{label:'Conn%',data:dayStats.map(d=>d.connRate),borderColor:'#a855f7',backgroundColor:'#a855f722',fill:true,tension:.3,pointRadius:5}]);
+  mkChart('tr_ach','line',dlbls,[{label:'Ach%',data:dayStats.map(d=>d.ach),borderColor:'#ff6b35',backgroundColor:'#ff6b3522',fill:true,tension:.3,pointRadius:5}]);
+  mkChart('tr_hv','bar',dlbls,[{label:'Home Visits',data:dayStats.map(d=>d.homeVisit),backgroundColor:'#fbbf2488',borderColor:'#fbbf24',borderWidth:1.5}]);
+  mkChart('tr_callmin','bar',dlbls,[{label:'Call Mins',data:dayStats.map(d=>d.callMin),backgroundColor:'#06b6d488',borderColor:'#06b6d4',borderWidth:1.5}]);
+
+  // Comparison table
+  const prevD=dayStats.length>=2?dayStats[dayStats.length-2]:null;
+  const thead=`<thead><tr><th>Date</th><th class="num">CCs</th><th class="num">Dials</th><th class="num">Δ Dials</th><th class="num">Connected</th><th class="num">Conn %</th><th class="num">Appos</th><th class="num">Δ Appos</th><th class="num">Target</th><th class="num">Ach %</th><th class="num">HV</th><th class="num">Call Mins</th></tr></thead>`;
+  let prevRow=null;
+  const tbody=dayStats.map(d=>{
+    const dD=prevRow?fmtD(prevRow.dials,d.dials):'<span class="neu">—</span>';
+    const dA=prevRow?fmtD(prevRow.appos,d.appos):'<span class="neu">—</span>';
+    const achC=d.ach>=100?'heat-hi':d.ach>=60?'heat-md':'heat-lo';
+    const connC=d.connRate>=45?'heat-hi':d.connRate>=30?'heat-md':'heat-lo';
+    const row=`<tr>
+      <td class="lbl">${d.date}</td><td class="num">${d.cc}</td>
+      <td class="num">${fmtN(d.dials)}</td><td class="num">${dD}</td>
+      <td class="num">${fmtN(d.connected)}</td>
+      <td class="num"><span class="heat ${connC}">${fmtP(d.connRate)}</span></td>
+      <td class="num">${fmtN(d.appos)}</td><td class="num">${dA}</td>
+      <td class="num">${fmtN(d.target)}</td>
+      <td class="num"><span class="heat ${achC}">${fmtP(d.ach)}</span></td>
+      <td class="num">${fmtN(d.homeVisit)}</td><td class="num">${fmtN(d.callMin)}</td>
+    </tr>`;
+    prevRow=d; return row;
+  }).join('');
+  document.getElementById('trendTable').innerHTML=thead+`<tbody>${tbody}</tbody>`;
+}
+
+</script>
+</body>
+</html>
